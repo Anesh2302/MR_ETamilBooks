@@ -1,0 +1,255 @@
+const path = require('path');
+const bcrypt = require('bcryptjs');
+
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'etamil.db');
+
+let Database;
+try {
+  Database = require('better-sqlite3');
+} catch (e) {
+  console.error('better-sqlite3 failed to load. This requires native build tools.');
+  console.error('On Windows, install: npm install --build-from-source better-sqlite3');
+  console.error('Or use WSL / Linux / Render (has prebuilt binaries).');
+  process.exit(1);
+}
+
+let db;
+
+const initDB = () => {
+  db = new Database(DB_PATH);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      full_name TEXT DEFAULT '',
+      preferred_language TEXT DEFAULT 'ta',
+      is_superuser INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS books (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      title_ta TEXT,
+      author TEXT DEFAULT '',
+      author_ta TEXT,
+      description TEXT DEFAULT '',
+      description_ta TEXT,
+      language TEXT DEFAULT 'ta',
+      file_type TEXT DEFAULT '',
+      file_size INTEGER DEFAULT 0,
+      file_url TEXT DEFAULT '',
+      cover_url TEXT DEFAULT '',
+      source TEXT DEFAULT 'user_upload',
+      category_id INTEGER,
+      status TEXT DEFAULT 'pending',
+      views_count INTEGER DEFAULT 0,
+      downloads_count INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (category_id) REFERENCES categories(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      name_en TEXT DEFAULT '',
+      book_count INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS bookmarks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      book_id INTEGER,
+      page INTEGER DEFAULT 1,
+      note TEXT DEFAULT '',
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (book_id) REFERENCES books(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS reading_progress (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      book_id INTEGER,
+      page INTEGER DEFAULT 1,
+      progress REAL DEFAULT 0,
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (book_id) REFERENCES books(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS translate_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      source_text TEXT,
+      translated_text TEXT,
+      source_language TEXT,
+      target_language TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS flashcard_sets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      name TEXT,
+      description TEXT DEFAULT '',
+      source_language TEXT DEFAULT 'ta',
+      target_language TEXT DEFAULT 'en',
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS flashcards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      set_id INTEGER,
+      source_text TEXT,
+      translated_text TEXT,
+      is_learned INTEGER DEFAULT 0,
+      FOREIGN KEY (set_id) REFERENCES flashcard_sets(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS ocr_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      image_url TEXT,
+      extracted_text TEXT,
+      translated_text TEXT,
+      language TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS audio_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      file_url TEXT,
+      transcribed_text TEXT,
+      translated_text TEXT,
+      language TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS tts_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      text TEXT,
+      language TEXT,
+      audio_url TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS summarize_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      source_text TEXT,
+      summary TEXT,
+      compression_ratio INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS search_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      query TEXT,
+      filters TEXT DEFAULT '{}',
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS roles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      permissions TEXT DEFAULT '[]'
+    );
+
+    CREATE TABLE IF NOT EXISTS user_roles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      role_id INTEGER,
+      UNIQUE(user_id, role_id),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (role_id) REFERENCES roles(id)
+    );
+  `);
+
+  const roleCount = db.prepare('SELECT COUNT(*) as c FROM roles').get();
+  if (roleCount.c === 0) {
+    db.prepare("INSERT INTO roles (name, permissions) VALUES ('admin', '[\"all\"]')").run();
+    db.prepare("INSERT INTO roles (name, permissions) VALUES ('editor', '[\"books.create\",\"books.edit\",\"books.delete\"]')").run();
+    db.prepare("INSERT INTO roles (name, permissions) VALUES ('user', '[\"books.read\",\"translate\",\"ocr\",\"tts\",\"summarize\",\"flashcards\"]')").run();
+  }
+
+  const adminCount = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
+  if (!adminCount) {
+    const hash = bcrypt.hashSync('admin123', 10);
+    db.prepare('INSERT INTO users (username, email, password, full_name, is_superuser) VALUES (?, ?, ?, ?, ?)').run('admin', 'admin@etamil.app', hash, 'Admin User', 1);
+    db.prepare('INSERT INTO users (username, email, password, full_name) VALUES (?, ?, ?, ?)').run('demo', 'demo@etamil.app', bcrypt.hashSync('demo123', 10), 'Demo User');
+  }
+
+  const catCount = db.prepare('SELECT COUNT(*) as c FROM categories').get();
+  if (catCount.c === 0) {
+    const catData = [
+      ['தமிழ் இலக்கியம்', 'Tamil Literature'],
+      ['கதைகள்', 'Stories'],
+      ['கவிதை', 'Poetry'],
+      ['வரலாறு', 'History'],
+      ['அறிவியல்', 'Science'],
+      ['கல்வி', 'Education'],
+      ['English Books', 'English Books'],
+      ['குழந்தை இலக்கியம்', 'Children Literature'],
+    ];
+    const insert = db.prepare('INSERT INTO categories (name, name_en) VALUES (?, ?)');
+    for (const [n, ne] of catData) insert.run(n, ne);
+  }
+
+  const bookCount = db.prepare('SELECT COUNT(*) as c FROM books').get();
+  if (bookCount.c === 0) {
+    const books = [
+      ['தமிழ் இலக்கிய வரலாறு', 'தமிழ் இலக்கிய வரலாறு', 'Dr. M. Varadharajan', 'ம. வரதராஜன்', 'A comprehensive history of Tamil literature.', 1, 'ta', 'approved'],
+      ['Silappadikaram', 'சிலப்பதிகாரம்', 'Ilango Adigal', 'இளங்கோ அடிகள்', 'One of the five great epics of Tamil literature.', 1, 'ta', 'approved'],
+      ['Thirukkural', 'திருக்குறள்', 'Thiruvalluvar', 'திருவள்ளுவர்', 'Ancient Tamil classic on ethics and life.', 1, 'ta', 'approved'],
+      ['Ponniyin Selvan', 'பொன்னியின் செல்வன்', 'Kalki Krishnamurthy', 'கல்கி கிருஷ்ணமூர்த்தி', 'Epic historical novel set in the Chola dynasty.', 2, 'ta', 'approved'],
+      ['Tamil Short Stories', 'தமிழ் சிறுகதை தொகுப்பு', 'Various Authors', null, 'Collection of best Tamil short stories.', 2, 'ta', 'approved'],
+      ['Bharathi Poems', 'பாரதியார் கவிதைகள்', 'Mahakavi Subramania Bharathi', 'மகாகவி சுப்பிரமணிய பாரதியார்', 'Patriotic and spiritual poems.', 3, 'ta', 'approved'],
+      ['History of Tamil Nadu', 'தமிழக வரலாறு', 'Prof. K. A. Nilakanta Sastri', null, 'Comprehensive history of Tamil Nadu.', 4, 'ta', 'approved'],
+      ['Tamil Science Dictionary', 'தமிழ் அறிவியல் அகராதி', 'Tamil Nadu Textbook Corp.', null, 'Complete science dictionary in Tamil.', 5, 'ta', 'approved'],
+      ['English Grammar for Tamil Speakers', null, 'R. K. Venkatesan', null, 'Learn English grammar with Tamil explanations.', 7, 'en', 'approved'],
+      ['Children Tamil Stories', 'குழந்தை கதைகள்', 'A. C. S. M. Academy', null, 'Moral stories for children in Tamil.', 8, 'ta', 'approved'],
+    ];
+    const insert = db.prepare('INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const b of books) insert.run(...b);
+  }
+};
+
+const query = (sql, params = []) => {
+  const stmt = db.prepare(sql);
+  const rows = stmt.all(...params);
+  return rows || [];
+};
+
+const queryOne = (sql, params = []) => {
+  return db.prepare(sql).get(...params) || null;
+};
+
+const run = (sql, params = []) => {
+  return db.prepare(sql).run(...params);
+};
+
+const insert = (sql, params = []) => {
+  const info = db.prepare(sql).run(...params);
+  return info.lastInsertRowid;
+};
+
+module.exports = { initDB, query, queryOne, run, insert };

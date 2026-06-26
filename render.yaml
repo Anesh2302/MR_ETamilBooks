@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: etamil-backend
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: cd backend-render && npm install
+    startCommand: cd backend-render && node server.js
+    healthCheckPath: /api/books/categories
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://anesh2302.github.io
+      - key: DB_PATH
+        value: /var/data/etamil.db
+    disk:
+      name: etamil-data
+      mountPath: /var/data
+      sizeGB: 1
