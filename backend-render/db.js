@@ -31,6 +31,7 @@ function tursoReq(statements) {
   requests.push({ type: 'close' });
 
   const body = JSON.stringify({ requests });
+  console.log('tursoReq sending ' + requests.length + ' requests, body length=' + body.length);
 
   return new Promise((resolve, reject) => {
     const req = https.request({
@@ -48,14 +49,23 @@ function tursoReq(statements) {
       res.on('end', () => {
         try {
           const parsed = JSON.parse(data);
-          if (parsed.error) reject(new Error(parsed.error.message || JSON.stringify(parsed.error)));
-          else resolve(parsed);
+          if (parsed.error) {
+            console.error('tursoReq error response:', JSON.stringify(parsed.error).substring(0, 500));
+            reject(new Error(parsed.error.message || JSON.stringify(parsed.error)));
+          } else {
+            console.log('tursoReq success, results count=' + (parsed.results ? parsed.results.length : 0));
+            resolve(parsed);
+          }
         } catch (e) {
+          console.error('tursoReq parse error, raw data:', data.substring(0, 500));
           reject(new Error('Turso parse error: ' + data.substring(0, 300)));
         }
       });
     });
-    req.on('error', reject);
+    req.on('error', e => {
+      console.error('tursoReq request error:', e.message);
+      reject(e);
+    });
     req.write(body);
     req.end();
   });
@@ -103,11 +113,19 @@ function getInsertId(resp) {
 const initDB = async () => {
   if (initialized) return;
 
-  await tursoReq([{ sql: 'CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, full_name TEXT DEFAULT \'\', preferred_language TEXT DEFAULT \'ta\', is_superuser INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime(\'now\')), updated_at TEXT DEFAULT (datetime(\'now\')))' }]);
-  await tursoReq([{ sql: 'CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, name_en TEXT DEFAULT \'\', book_count INTEGER DEFAULT 0)' }]);
-  await tursoReq([{ sql: 'CREATE TABLE IF NOT EXISTS books (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, title_ta TEXT, author TEXT DEFAULT \'\', author_ta TEXT, description TEXT DEFAULT \'\', description_ta TEXT, language TEXT DEFAULT \'ta\', file_type TEXT DEFAULT \'\', file_size INTEGER DEFAULT 0, file_url TEXT DEFAULT \'\', cover_url TEXT DEFAULT \'\', source TEXT DEFAULT \'user_upload\', category_id INTEGER, status TEXT DEFAULT \'pending\', views_count INTEGER DEFAULT 0, downloads_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime(\'now\')), updated_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (category_id) REFERENCES categories(id))' }]);
-
-  initialized = true;
+  try {
+    console.log('initDB: creating users table');
+    await tursoReq([{ sql: 'CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, full_name TEXT DEFAULT \'\', preferred_language TEXT DEFAULT \'ta\', is_superuser INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime(\'now\')), updated_at TEXT DEFAULT (datetime(\'now\')))' }]);
+    console.log('initDB: users table created');
+    await tursoReq([{ sql: 'CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, name_en TEXT DEFAULT \'\', book_count INTEGER DEFAULT 0)' }]);
+    console.log('initDB: categories table created');
+    await tursoReq([{ sql: 'CREATE TABLE IF NOT EXISTS books (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, title_ta TEXT, author TEXT DEFAULT \'\', author_ta TEXT, description TEXT DEFAULT \'\', description_ta TEXT, language TEXT DEFAULT \'ta\', file_type TEXT DEFAULT \'\', file_size INTEGER DEFAULT 0, file_url TEXT DEFAULT \'\', cover_url TEXT DEFAULT \'\', source TEXT DEFAULT \'user_upload\', category_id INTEGER, status TEXT DEFAULT \'pending\', views_count INTEGER DEFAULT 0, downloads_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime(\'now\')), updated_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (category_id) REFERENCES categories(id))' }]);
+    console.log('initDB: books table created');
+    initialized = true;
+    console.log('initDB: complete');
+  } catch (e) {
+    console.error('initDB error:', e.message);
+  }
 };
 
 const ensureInit = async () => {
