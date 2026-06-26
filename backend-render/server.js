@@ -1,4 +1,4 @@
-require('dotenv').config();
+if (!process.env.VERCEL) require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -10,7 +10,8 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
-const Tesseract = require('tesseract.js');
+let _Tesseract = null;
+function getTesseract() { if (!_Tesseract) _Tesseract = require('tesseract.js'); return _Tesseract; }
 const { initDB, query, queryOne, run, insert } = require('./db');
 
 const app = express();
@@ -436,7 +437,7 @@ app.put('/api/flashcards/cards/:id/progress', auth, [
 app.post('/api/ocr/translate', auth, uploadLimiter, upload.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).json({ detail: 'No image uploaded' });
   try {
-    const { data } = await Tesseract.recognize(req.file.path, 'tam+eng', { logger: () => {} });
+    const { data } = await getTesseract().recognize(req.file.path, 'tam+eng', { logger: () => {} });
     const extracted = (data.text || '').trim();
     const translated = extracted ? `[EN] ${extracted}` : 'No text detected in the image.';
     await insert('INSERT INTO ocr_history (user_id, extracted_text, translated_text) VALUES (?, ?, ?)',
