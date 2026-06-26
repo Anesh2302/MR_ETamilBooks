@@ -114,7 +114,7 @@ const initDB = async () => {
     `CREATE TABLE IF NOT EXISTS user_roles (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, role_id INTEGER, UNIQUE(user_id, role_id), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (role_id) REFERENCES roles(id))`,
   ];
 
-  for (const sql of tables) await tursoReq([{ sql }]);
+  await tursoReq(tables.map(sql => ({ sql })));
 
   const roleCount = parseRow(await tursoReq([{ sql: 'SELECT COUNT(*) as c FROM roles' }]));
   if (!roleCount || roleCount.c === 0) {
@@ -137,19 +137,16 @@ const initDB = async () => {
 
   const catCount = parseRow(await tursoReq([{ sql: 'SELECT COUNT(*) as c FROM categories' }]));
   if (!catCount || catCount.c === 0) {
-    const catData = [
+    await tursoReq([
       ['தமிழ் இலக்கியம்', 'Tamil Literature'], ['கதைகள்', 'Stories'], ['கவிதை', 'Poetry'],
       ['வரலாறு', 'History'], ['அறிவியல்', 'Science'], ['கல்வி', 'Education'],
       ['English Books', 'English Books'], ['குழந்தை இலக்கியம்', 'Children Literature'],
-    ];
-    for (const [n, ne] of catData) {
-      await tursoReq([{ sql: 'INSERT INTO categories (name, name_en) VALUES (?, ?)', args: [n, ne] }]);
-    }
+    ].map(([n, ne]) => ({ sql: 'INSERT INTO categories (name, name_en) VALUES (?, ?)', args: [n, ne] })));
   }
 
   const bookCount = parseRow(await tursoReq([{ sql: 'SELECT COUNT(*) as c FROM books' }]));
   if (!bookCount || bookCount.c === 0) {
-    const bookData = [
+    await tursoReq([
       ['தமிழ் இலக்கிய வரலாறு', 'தமிழ் இலக்கிய வரலாறு', 'Dr. M. Varadharajan', 'ம. வரதராஜன்', 'A comprehensive history of Tamil literature.', 1, 'ta', 'approved'],
       ['Silappadikaram', 'சிலப்பதிகாரம்', 'Ilango Adigal', 'இளங்கோ அடிகள்', 'One of the five great epics of Tamil literature.', 1, 'ta', 'approved'],
       ['Thirukkural', 'திருக்குறள்', 'Thiruvalluvar', 'திருவள்ளுவர்', 'Ancient Tamil classic on ethics and life.', 1, 'ta', 'approved'],
@@ -160,10 +157,7 @@ const initDB = async () => {
       ['Tamil Science Dictionary', 'தமிழ் அறிவியல் அகராதி', 'Tamil Nadu Textbook Corp.', null, 'Complete science dictionary in Tamil.', 5, 'ta', 'approved'],
       ['English Grammar for Tamil Speakers', null, 'R. K. Venkatesan', null, 'Learn English grammar with Tamil explanations.', 7, 'en', 'approved'],
       ['Children Tamil Stories', 'குழந்தை கதைகள்', 'A. C. S. M. Academy', null, 'Moral stories for children in Tamil.', 8, 'ta', 'approved'],
-    ];
-    for (const b of bookData) {
-      await tursoReq([{ sql: 'INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', args: b }]);
-    }
+    ].map(b => ({ sql: 'INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', args: b })));
   }
 
   initialized = true;
