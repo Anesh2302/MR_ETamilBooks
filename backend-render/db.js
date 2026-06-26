@@ -129,42 +129,24 @@ const initDB = async () => {
       INSERT OR IGNORE INTO roles (name, permissions) VALUES ('user', '["books.read","translate","ocr","tts","summarize","flashcards"]');
       INSERT OR IGNORE INTO users (username, email, password, full_name, is_superuser) VALUES ('admin', 'admin@etamil.app', '${hash.replace(/'/g, "''")}', 'Admin User', 1);
       INSERT OR IGNORE INTO users (username, email, password, full_name) VALUES ('demo', 'demo@etamil.app', '${demoHash.replace(/'/g, "''")}', 'Demo User');
+      INSERT OR IGNORE INTO categories (name, name_en) VALUES ('தமிழ் இலக்கியம்', 'Tamil Literature'), ('கதைகள்', 'Stories'), ('கவிதை', 'Poetry'), ('வரலாறு', 'History'), ('அறிவியல்', 'Science'), ('கல்வி', 'Education'), ('English Books', 'English Books'), ('குழந்தை இலக்கியம்', 'Children Literature');
     `
   }]);
 
-  const catCount = parseRow(await tursoReq([{ sql: 'SELECT COUNT(*) as c FROM categories' }]));
-  if (!catCount || catCount.c === 0) {
-    await tursoReq([{
-      sql: `
-        INSERT INTO categories (name, name_en) VALUES ('தமிழ் இலக்கியம்', 'Tamil Literature');
-        INSERT INTO categories (name, name_en) VALUES ('கதைகள்', 'Stories');
-        INSERT INTO categories (name, name_en) VALUES ('கவிதை', 'Poetry');
-        INSERT INTO categories (name, name_en) VALUES ('வரலாறு', 'History');
-        INSERT INTO categories (name, name_en) VALUES ('அறிவியல்', 'Science');
-        INSERT INTO categories (name, name_en) VALUES ('கல்வி', 'Education');
-        INSERT INTO categories (name, name_en) VALUES ('English Books', 'English Books');
-        INSERT INTO categories (name, name_en) VALUES ('குழந்தை இலக்கியம்', 'Children Literature');
-      `
-    }]);
-  }
-
-  const bookCount = parseRow(await tursoReq([{ sql: 'SELECT COUNT(*) as c FROM books' }]));
-  if (!bookCount || bookCount.c === 0) {
-    await tursoReq([{
-      sql: `
-        INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('தமிழ் இலக்கிய வரலாறு', 'தமிழ் இலக்கிய வரலாறு', 'Dr. M. Varadharajan', 'ம. வரதராஜன்', 'A comprehensive history of Tamil literature.', 1, 'ta', 'approved');
-        INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Silappadikaram', 'சிலப்பதிகாரம்', 'Ilango Adigal', 'இளங்கோ அடிகள்', 'One of the five great epics of Tamil literature.', 1, 'ta', 'approved');
-        INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Thirukkural', 'திருக்குறள்', 'Thiruvalluvar', 'திருவள்ளுவர்', 'Ancient Tamil classic on ethics and life.', 1, 'ta', 'approved');
-        INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Ponniyin Selvan', 'பொன்னியின் செல்வன்', 'Kalki Krishnamurthy', 'கல்கி கிருஷ்ணமூர்த்தி', 'Epic historical novel set in the Chola dynasty.', 2, 'ta', 'approved');
-        INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Tamil Short Stories', 'தமிழ் சிறுகதை தொகுப்பு', 'Various Authors', NULL, 'Collection of best Tamil short stories.', 2, 'ta', 'approved');
-        INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Bharathi Poems', 'பாரதியார் கவிதைகள்', 'Mahakavi Subramania Bharathi', 'மகாகவி சுப்பிரமணிய பாரதியார்', 'Patriotic and spiritual poems.', 3, 'ta', 'approved');
-        INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('History of Tamil Nadu', 'தமிழக வரலாறு', 'Prof. K. A. Nilakanta Sastri', NULL, 'Comprehensive history of Tamil Nadu.', 4, 'ta', 'approved');
-        INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Tamil Science Dictionary', 'தமிழ் அறிவியல் அகராதி', 'Tamil Nadu Textbook Corp.', NULL, 'Complete science dictionary in Tamil.', 5, 'ta', 'approved');
-        INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('English Grammar for Tamil Speakers', NULL, 'R. K. Venkatesan', NULL, 'Learn English grammar with Tamil explanations.', 7, 'en', 'approved');
-        INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Children Tamil Stories', 'குழந்தை கதைகள்', 'A. C. S. M. Academy', NULL, 'Moral stories for children in Tamil.', 8, 'ta', 'approved');
-      `
-    }]);
-  }
+  await tursoReq([{
+    sql: `
+      INSERT OR IGNORE INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('தமிழ் இலக்கிய வரலாறு', 'தமிழ் இலக்கிய வரலாறு', 'Dr. M. Varadharajan', 'ம. வரதராஜன்', 'A comprehensive history of Tamil literature.', 1, 'ta', 'approved');
+      INSERT OR IGNORE INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Silappadikaram', 'சிலப்பதிகாரம்', 'Ilango Adigal', 'இளங்கோ அடிகள்', 'One of the five great epics of Tamil literature.', 1, 'ta', 'approved');
+      INSERT OR IGNORE INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Thirukkural', 'திருக்குறள்', 'Thiruvalluvar', 'திருவள்ளுவர்', 'Ancient Tamil classic on ethics and life.', 1, 'ta', 'approved');
+      INSERT OR IGNORE INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Ponniyin Selvan', 'பொன்னியின் செல்வன்', 'Kalki Krishnamurthy', 'கல்கி கிருஷ்ணமூர்த்தி', 'Epic historical novel set in the Chola dynasty.', 2, 'ta', 'approved');
+      INSERT OR IGNORE INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Tamil Short Stories', 'தமிழ் சிறுகதை தொகுப்பு', 'Various Authors', NULL, 'Collection of best Tamil short stories.', 2, 'ta', 'approved');
+      INSERT OR IGNORE INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Bharathi Poems', 'பாரதியார் கவிதைகள்', 'Mahakavi Subramania Bharathi', 'மகாகவி சுப்பிரமணிய பாரதியார்', 'Patriotic and spiritual poems.', 3, 'ta', 'approved');
+      INSERT OR IGNORE INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('History of Tamil Nadu', 'தமிழக வரலாறு', 'Prof. K. A. Nilakanta Sastri', NULL, 'Comprehensive history of Tamil Nadu.', 4, 'ta', 'approved');
+      INSERT OR IGNORE INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Tamil Science Dictionary', 'தமிழ் அறிவியல் அகராதி', 'Tamil Nadu Textbook Corp.', NULL, 'Complete science dictionary in Tamil.', 5, 'ta', 'approved');
+      INSERT OR IGNORE INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('English Grammar for Tamil Speakers', NULL, 'R. K. Venkatesan', NULL, 'Learn English grammar with Tamil explanations.', 7, 'en', 'approved');
+      INSERT OR IGNORE INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES ('Children Tamil Stories', 'குழந்தை கதைகள்', 'A. C. S. M. Academy', NULL, 'Moral stories for children in Tamil.', 8, 'ta', 'approved');
+    `
+  }]);
 
   initialized = true;
 };
@@ -176,7 +158,7 @@ const ensureInit = async () => {
   }
   await Promise.race([
     initPromise,
-    new Promise(r => setTimeout(r, 8000)),
+    new Promise(r => setTimeout(r, 9000)),
   ]);
 };
 
