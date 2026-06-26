@@ -13,12 +13,20 @@ const apiPath = '/v2/pipeline';
 let initialized = false;
 let initPromise = null;
 
+function toTypedArgs(args) {
+  return (args || []).map(a => {
+    if (a === null || a === undefined) return { type: 'null', value: null };
+    if (typeof a === 'number') return { type: Number.isInteger(a) ? 'integer' : 'real', value: a };
+    return { type: 'text', value: String(a) };
+  });
+}
+
 function tursoReq(statements) {
   const requests = (typeof statements === 'string' ? [{ sql: statements }] : statements).map(s => ({
     type: 'execute',
     stmt: {
       sql: typeof s === 'string' ? s : s.sql,
-      args: (typeof s === 'string' ? [] : (s.args || [])),
+      args: toTypedArgs(typeof s === 'string' ? [] : s.args),
     },
   }));
   requests.push({ type: 'close' });
