@@ -102,11 +102,9 @@ function fileFilter(req, file, cb) {
   cb(new Error(`File type ${file.mimetype} is not allowed`));
 }
 
-const upload = multer({
-  dest: UPLOAD_DIR,
-  limits: { fileSize: MAX_FILE_SIZE },
-  fileFilter,
-});
+const upload = isVercel
+  ? multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_SIZE }, fileFilter })
+  : multer({ dest: UPLOAD_DIR, limits: { fileSize: MAX_FILE_SIZE }, fileFilter });
 
 // --- Input validation helpers ---
 const validate = (req, res, next) => {
