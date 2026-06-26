@@ -649,9 +649,6 @@ if (!isVercel) {
       process.exit(1);
     }
   })();
-} else {
-  // On Vercel: start DB init in background (don't block cold start)
-  initDB().catch(err => console.error('initDB error:', err));
 }
 
 // --- Vercel export ---
