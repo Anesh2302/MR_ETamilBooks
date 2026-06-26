@@ -104,39 +104,49 @@ function getInsertId(resp) {
 const initDB = async () => {
   if (initialized) return;
 
-  await tursoReq([
-    { sql: 'CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, full_name TEXT DEFAULT \'\', preferred_language TEXT DEFAULT \'ta\', is_superuser INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime(\'now\')), updated_at TEXT DEFAULT (datetime(\'now\')))' },
-    { sql: 'CREATE TABLE IF NOT EXISTS books (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, title_ta TEXT, author TEXT DEFAULT \'\', author_ta TEXT, description TEXT DEFAULT \'\', description_ta TEXT, language TEXT DEFAULT \'ta\', file_type TEXT DEFAULT \'\', file_size INTEGER DEFAULT 0, file_url TEXT DEFAULT \'\', cover_url TEXT DEFAULT \'\', source TEXT DEFAULT \'user_upload\', category_id INTEGER, status TEXT DEFAULT \'pending\', views_count INTEGER DEFAULT 0, downloads_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime(\'now\')), updated_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (category_id) REFERENCES categories(id))' },
-    { sql: 'CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, name_en TEXT DEFAULT \'\', book_count INTEGER DEFAULT 0)' },
-    { sql: 'CREATE TABLE IF NOT EXISTS bookmarks (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, book_id INTEGER, page INTEGER DEFAULT 1, note TEXT DEFAULT \'\', created_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (book_id) REFERENCES books(id))' },
-    { sql: 'CREATE TABLE IF NOT EXISTS reading_progress (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, book_id INTEGER, page INTEGER DEFAULT 1, progress REAL DEFAULT 0, updated_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (book_id) REFERENCES books(id))' },
-    { sql: 'CREATE TABLE IF NOT EXISTS translate_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, source_text TEXT, translated_text TEXT, source_language TEXT, target_language TEXT, created_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (user_id) REFERENCES users(id))' },
-    { sql: 'CREATE TABLE IF NOT EXISTS flashcard_sets (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT, description TEXT DEFAULT \'\', source_language TEXT DEFAULT \'ta\', target_language TEXT DEFAULT \'en\', created_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (user_id) REFERENCES users(id))' },
-    { sql: 'CREATE TABLE IF NOT EXISTS flashcards (id INTEGER PRIMARY KEY AUTOINCREMENT, set_id INTEGER, source_text TEXT, translated_text TEXT, is_learned INTEGER DEFAULT 0, FOREIGN KEY (set_id) REFERENCES flashcard_sets(id))' },
-    { sql: 'CREATE TABLE IF NOT EXISTS ocr_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, image_url TEXT, extracted_text TEXT, translated_text TEXT, language TEXT, created_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (user_id) REFERENCES users(id))' },
-    { sql: 'CREATE TABLE IF NOT EXISTS audio_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, file_url TEXT, transcribed_text TEXT, translated_text TEXT, language TEXT, created_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (user_id) REFERENCES users(id))' },
-    { sql: 'CREATE TABLE IF NOT EXISTS tts_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, text TEXT, language TEXT, audio_url TEXT, created_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (user_id) REFERENCES users(id))' },
-    { sql: 'CREATE TABLE IF NOT EXISTS summarize_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, source_text TEXT, summary TEXT, compression_ratio INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (user_id) REFERENCES users(id))' },
-    { sql: 'CREATE TABLE IF NOT EXISTS search_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, query TEXT, filters TEXT DEFAULT \'{}\', created_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (user_id) REFERENCES users(id))' },
-    { sql: 'CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, permissions TEXT DEFAULT \'[]\')' },
-    { sql: 'CREATE TABLE IF NOT EXISTS user_roles (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, role_id INTEGER, UNIQUE(user_id, role_id), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (role_id) REFERENCES roles(id))' },
-  ]);
+  await tursoReq([{
+    sql: `
+      CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, full_name TEXT DEFAULT '', preferred_language TEXT DEFAULT 'ta', is_superuser INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')));
+      CREATE TABLE IF NOT EXISTS books (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, title_ta TEXT, author TEXT DEFAULT '', author_ta TEXT, description TEXT DEFAULT '', description_ta TEXT, language TEXT DEFAULT 'ta', file_type TEXT DEFAULT '', file_size INTEGER DEFAULT 0, file_url TEXT DEFAULT '', cover_url TEXT DEFAULT '', source TEXT DEFAULT 'user_upload', category_id INTEGER, status TEXT DEFAULT 'pending', views_count INTEGER DEFAULT 0, downloads_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (category_id) REFERENCES categories(id));
+      CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, name_en TEXT DEFAULT '', book_count INTEGER DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS bookmarks (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, book_id INTEGER, page INTEGER DEFAULT 1, note TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (book_id) REFERENCES books(id));
+      CREATE TABLE IF NOT EXISTS reading_progress (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, book_id INTEGER, page INTEGER DEFAULT 1, progress REAL DEFAULT 0, updated_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (book_id) REFERENCES books(id));
+      CREATE TABLE IF NOT EXISTS translate_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, source_text TEXT, translated_text TEXT, source_language TEXT, target_language TEXT, created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (user_id) REFERENCES users(id));
+      CREATE TABLE IF NOT EXISTS flashcard_sets (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, name TEXT, description TEXT DEFAULT '', source_language TEXT DEFAULT 'ta', target_language TEXT DEFAULT 'en', created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (user_id) REFERENCES users(id));
+      CREATE TABLE IF NOT EXISTS flashcards (id INTEGER PRIMARY KEY AUTOINCREMENT, set_id INTEGER, source_text TEXT, translated_text TEXT, is_learned INTEGER DEFAULT 0, FOREIGN KEY (set_id) REFERENCES flashcard_sets(id));
+      CREATE TABLE IF NOT EXISTS ocr_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, image_url TEXT, extracted_text TEXT, translated_text TEXT, language TEXT, created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (user_id) REFERENCES users(id));
+      CREATE TABLE IF NOT EXISTS audio_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, file_url TEXT, transcribed_text TEXT, translated_text TEXT, language TEXT, created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (user_id) REFERENCES users(id));
+      CREATE TABLE IF NOT EXISTS tts_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, text TEXT, language TEXT, audio_url TEXT, created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (user_id) REFERENCES users(id));
+      CREATE TABLE IF NOT EXISTS summarize_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, source_text TEXT, summary TEXT, compression_ratio INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (user_id) REFERENCES users(id));
+      CREATE TABLE IF NOT EXISTS search_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, query TEXT, filters TEXT DEFAULT '{}', created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (user_id) REFERENCES users(id));
+      CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, permissions TEXT DEFAULT '[]');
+      CREATE TABLE IF NOT EXISTS user_roles (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, role_id INTEGER, UNIQUE(user_id, role_id), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (role_id) REFERENCES roles(id));
+    `
+  }]);
 
   const hash = bcrypt.hashSync('admin123', 10);
   const demoHash = bcrypt.hashSync('demo123', 10);
 
   await tursoReq([
-    { sql: "INSERT INTO roles (name, permissions) SELECT 'admin', '[\"all\"]' WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'admin')" },
-    { sql: "INSERT INTO roles (name, permissions) SELECT 'editor', '[\"books.create\",\"books.edit\",\"books.delete\"]' WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'editor')" },
-    { sql: "INSERT INTO roles (name, permissions) SELECT 'user', '[\"books.read\",\"translate\",\"ocr\",\"tts\",\"summarize\",\"flashcards\"]' WHERE NOT EXISTS (SELECT 1 FROM roles WHERE name = 'user')" },
-    { sql: 'INSERT INTO users (username, email, password, full_name, is_superuser) SELECT ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = \'admin\')', args: ['admin', 'admin@etamil.app', hash, 'Admin User', 1] },
-    { sql: 'INSERT INTO users (username, email, password, full_name) SELECT ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM users WHERE username = \'demo\')', args: ['demo', 'demo@etamil.app', demoHash, 'Demo User'] },
-    ...([
+    { sql: "INSERT OR IGNORE INTO roles (name, permissions) VALUES ('admin', '[\"all\"]')" },
+    { sql: "INSERT OR IGNORE INTO roles (name, permissions) VALUES ('editor', '[\"books.create\",\"books.edit\",\"books.delete\"]')" },
+    { sql: "INSERT OR IGNORE INTO roles (name, permissions) VALUES ('user', '[\"books.read\",\"translate\",\"ocr\",\"tts\",\"summarize\",\"flashcards\"]')" },
+    { sql: 'INSERT OR IGNORE INTO users (username, email, password, full_name, is_superuser) VALUES (?, ?, ?, ?, ?)', args: ['admin', 'admin@etamil.app', hash, 'Admin User', 1] },
+    { sql: 'INSERT OR IGNORE INTO users (username, email, password, full_name) VALUES (?, ?, ?, ?)', args: ['demo', 'demo@etamil.app', demoHash, 'Demo User'] },
+  ]);
+
+  const catCount = parseRow(await tursoReq([{ sql: 'SELECT COUNT(*) as c FROM categories' }]));
+  if (!catCount || catCount.c === 0) {
+    await tursoReq([
       ['தமிழ் இலக்கியம்', 'Tamil Literature'], ['கதைகள்', 'Stories'], ['கவிதை', 'Poetry'],
       ['வரலாறு', 'History'], ['அறிவியல்', 'Science'], ['கல்வி', 'Education'],
       ['English Books', 'English Books'], ['குழந்தை இலக்கியம்', 'Children Literature'],
-    ].map(([n, ne]) => ({ sql: 'INSERT INTO categories (name, name_en) SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = ?)', args: [n, ne, n] }))),
-    ...([
+    ].map(([n, ne]) => ({ sql: 'INSERT INTO categories (name, name_en) VALUES (?, ?)', args: [n, ne] })));
+  }
+
+  const bookCount = parseRow(await tursoReq([{ sql: 'SELECT COUNT(*) as c FROM books' }]));
+  if (!bookCount || bookCount.c === 0) {
+    await tursoReq([
       ['தமிழ் இலக்கிய வரலாறு', 'தமிழ் இலக்கிய வரலாறு', 'Dr. M. Varadharajan', 'ம. வரதராஜன்', 'A comprehensive history of Tamil literature.', 1, 'ta', 'approved'],
       ['Silappadikaram', 'சிலப்பதிகாரம்', 'Ilango Adigal', 'இளங்கோ அடிகள்', 'One of the five great epics of Tamil literature.', 1, 'ta', 'approved'],
       ['Thirukkural', 'திருக்குறள்', 'Thiruvalluvar', 'திருவள்ளுவர்', 'Ancient Tamil classic on ethics and life.', 1, 'ta', 'approved'],
@@ -147,8 +157,8 @@ const initDB = async () => {
       ['Tamil Science Dictionary', 'தமிழ் அறிவியல் அகராதி', 'Tamil Nadu Textbook Corp.', null, 'Complete science dictionary in Tamil.', 5, 'ta', 'approved'],
       ['English Grammar for Tamil Speakers', null, 'R. K. Venkatesan', null, 'Learn English grammar with Tamil explanations.', 7, 'en', 'approved'],
       ['Children Tamil Stories', 'குழந்தை கதைகள்', 'A. C. S. M. Academy', null, 'Moral stories for children in Tamil.', 8, 'ta', 'approved'],
-    ].map(b => ({ sql: 'INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM books WHERE title = ?)', args: [...b, b[0]] }))),
-  ]);
+    ].map(b => ({ sql: 'INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', args: b })));
+  }
 
   initialized = true;
 };
