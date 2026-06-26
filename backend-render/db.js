@@ -10,6 +10,7 @@ if (!TURSO_DB_URL || !TURSO_DB_TOKEN) {
 
 const apiHost = TURSO_DB_URL.replace('libsql://', '');
 const apiPath = '/v2/pipeline';
+let initialized = false;
 function toTypedArgs(args) {
   return (args || []).map(a => {
     if (a === null || a === undefined) return { type: 'null', value: null };
