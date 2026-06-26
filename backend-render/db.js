@@ -9,14 +9,12 @@ let createClient;
 try {
   createClient = require('@libsql/client').createClient;
 } catch (e) {
-  console.error('@libsql/client failed to load. Run: npm install @libsql/client');
-  process.exit(1);
+  throw new Error('@libsql/client failed to load. Run: npm install @libsql/client');
 }
 
 const initDB = async () => {
   if (!TURSO_DB_URL || !TURSO_DB_TOKEN) {
-    console.error('FATAL: TURSO_DB_URL and TURSO_DB_TOKEN environment variables must be set');
-    process.exit(1);
+    throw new Error('FATAL: TURSO_DB_URL and TURSO_DB_TOKEN environment variables must be set');
   }
 
   db = createClient({
@@ -227,22 +225,36 @@ const initDB = async () => {
   }
 };
 
+let initPromise = null;
+
+const ensureDB = async () => {
+  if (!db) {
+    if (!initPromise) initPromise = initDB();
+    await initPromise;
+  }
+  return db;
+};
+
 const query = async (sql, params = []) => {
+  await ensureDB();
   const result = await db.execute({ sql, args: params });
   return result.rows || [];
 };
 
 const queryOne = async (sql, params = []) => {
+  await ensureDB();
   const result = await db.execute({ sql, args: params });
   return result.rows[0] || null;
 };
 
 const run = async (sql, params = []) => {
+  await ensureDB();
   const result = await db.execute({ sql, args: params });
   return result;
 };
 
 const insert = async (sql, params = []) => {
+  await ensureDB();
   const result = await db.execute({ sql, args: params });
   return result.lastInsertRowid !== undefined ? Number(result.lastInsertRowid) : 0;
 };
