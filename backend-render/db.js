@@ -10,9 +10,6 @@ if (!TURSO_DB_URL || !TURSO_DB_TOKEN) {
 
 const apiHost = TURSO_DB_URL.replace('libsql://', '');
 const apiPath = '/v2/pipeline';
-let initialized = false;
-let initPromise = null;
-
 function toTypedArgs(args) {
   return (args || []).map(a => {
     if (a === null || a === undefined) return { type: 'null', value: null };
@@ -151,35 +148,40 @@ const initDB = async () => {
   initialized = true;
 };
 
-const ensureInit = async () => {
-  if (initialized) return;
-  if (!initPromise) {
-    initPromise = initDB().then(() => { initialized = true; }).catch(() => {});
-  }
-  await Promise.race([
-    initPromise,
-    new Promise(r => setTimeout(r, 9000)),
-  ]);
-};
-
 const query = async (sql, params = []) => {
-  await ensureInit();
-  return parseRows(await tursoReq([{ sql, args: params }]));
+  try {
+    return parseRows(await tursoReq([{ sql, args: params }]));
+  } catch (e) {
+    if (e.message && e.message.includes('no such table')) return [];
+    throw e;
+  }
 };
 
 const queryOne = async (sql, params = []) => {
-  await ensureInit();
-  return parseRow(await tursoReq([{ sql, args: params }]));
+  try {
+    return parseRow(await tursoReq([{ sql, args: params }]));
+  } catch (e) {
+    if (e.message && e.message.includes('no such table')) return null;
+    throw e;
+  }
 };
 
 const run = async (sql, params = []) => {
-  await ensureInit();
-  return tursoReq([{ sql, args: params }]);
+  try {
+    return tursoReq([{ sql, args: params }]);
+  } catch (e) {
+    if (e.message && e.message.includes('no such table')) return null;
+    throw e;
+  }
 };
 
 const insert = async (sql, params = []) => {
-  await ensureInit();
-  return getInsertId(await tursoReq([{ sql, args: params }]));
+  try {
+    return getInsertId(await tursoReq([{ sql, args: params }]));
+  } catch (e) {
+    if (e.message && e.message.includes('no such table')) return 0;
+    throw e;
+  }
 };
 
 module.exports = { initDB, query, queryOne, run, insert };
