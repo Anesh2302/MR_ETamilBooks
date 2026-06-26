@@ -11,6 +11,7 @@ if (!TURSO_DB_URL || !TURSO_DB_TOKEN) {
 const apiHost = TURSO_DB_URL.replace('libsql://', '');
 const apiPath = '/v2/pipeline';
 let initialized = false;
+let initPromise = null;
 function toTypedArgs(args) {
   return (args || []).map(a => {
     if (a === null || a === undefined) return { type: 'null', value: null };
@@ -149,7 +150,16 @@ const initDB = async () => {
   initialized = true;
 };
 
+const ensureInit = async () => {
+  if (initialized) return;
+  if (!initPromise) {
+    initPromise = initDB().then(() => { initialized = true; }).catch(() => {});
+  }
+  await Promise.race([initPromise, new Promise(r => setTimeout(r, 4000))]);
+};
+
 const query = async (sql, params = []) => {
+  await ensureInit();
   try {
     return parseRows(await tursoReq([{ sql, args: params }]));
   } catch (e) {
@@ -159,6 +169,7 @@ const query = async (sql, params = []) => {
 };
 
 const queryOne = async (sql, params = []) => {
+  await ensureInit();
   try {
     return parseRow(await tursoReq([{ sql, args: params }]));
   } catch (e) {
@@ -168,6 +179,7 @@ const queryOne = async (sql, params = []) => {
 };
 
 const run = async (sql, params = []) => {
+  await ensureInit();
   try {
     return tursoReq([{ sql, args: params }]);
   } catch (e) {
@@ -177,6 +189,7 @@ const run = async (sql, params = []) => {
 };
 
 const insert = async (sql, params = []) => {
+  await ensureInit();
   try {
     return getInsertId(await tursoReq([{ sql, args: params }]));
   } catch (e) {
