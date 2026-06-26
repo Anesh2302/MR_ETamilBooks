@@ -16,12 +16,9 @@ const { initDB, query, queryOne, run, insert } = require('./db');
 const app = express();
 const PORT = process.env.PORT || 4000;
 const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET environment variable is not set');
-  process.exit(1);
-}
 const NODE_ENV = process.env.NODE_ENV || 'production';
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:3000').split(',').map(s => s.trim());
+const isVercel = !!process.env.VERCEL;
 
 // --- Security headers ---
 app.use(helmet({
@@ -638,10 +635,22 @@ app.use((req, res) => {
   res.status(404).json({ detail: 'Not found' });
 });
 
-// --- Start ---
-initDB();
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`ETamil API server running on port ${PORT}`);
-  console.log(`Environment: ${NODE_ENV}`);
-  console.log(`CORS origins: ${CORS_ORIGINS.join(', ')}`);
-});
+// --- Start (only in non-Vercel environments) ---
+if (!isVercel) {
+  (async () => {
+    try {
+      await initDB();
+      app.listen(PORT, '0.0.0.0', () => {
+        console.log(`ETamil API server running on port ${PORT}`);
+        console.log(`Environment: ${NODE_ENV}`);
+        console.log(`CORS origins: ${CORS_ORIGINS.join(', ')}`);
+      });
+    } catch (err) {
+      console.error('Failed to initialize database:', err);
+      process.exit(1);
+    }
+  })();
+}
+
+// --- Vercel export ---
+module.exports = app;

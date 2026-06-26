@@ -1,27 +1,31 @@
-const path = require('path');
 const bcrypt = require('bcryptjs');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'etamil.db');
-
-let Database;
-try {
-  Database = require('better-sqlite3');
-} catch (e) {
-  console.error('better-sqlite3 failed to load. This requires native build tools.');
-  console.error('On Windows, install: npm install --build-from-source better-sqlite3');
-  console.error('Or use WSL / Linux / Render (has prebuilt binaries).');
-  process.exit(1);
-}
+const TURSO_DB_URL = process.env.TURSO_DB_URL;
+const TURSO_DB_TOKEN = process.env.TURSO_DB_TOKEN;
 
 let db;
 
-const initDB = () => {
-  db = new Database(DB_PATH);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+let createClient;
+try {
+  createClient = require('@libsql/client').createClient;
+} catch (e) {
+  console.error('@libsql/client failed to load. Run: npm install @libsql/client');
+  process.exit(1);
+}
 
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
+const initDB = async () => {
+  if (!TURSO_DB_URL || !TURSO_DB_TOKEN) {
+    console.error('FATAL: TURSO_DB_URL and TURSO_DB_TOKEN environment variables must be set');
+    process.exit(1);
+  }
+
+  db = createClient({
+    url: TURSO_DB_URL,
+    authToken: TURSO_DB_TOKEN,
+  });
+
+  await db.batch([
+    `CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
       email TEXT UNIQUE NOT NULL,
@@ -32,9 +36,8 @@ const initDB = () => {
       is_active INTEGER DEFAULT 1,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS books (
+    )`,
+    `CREATE TABLE IF NOT EXISTS books (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
       title_ta TEXT,
@@ -55,16 +58,14 @@ const initDB = () => {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (category_id) REFERENCES categories(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS categories (
+    )`,
+    `CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       name_en TEXT DEFAULT '',
       book_count INTEGER DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS bookmarks (
+    )`,
+    `CREATE TABLE IF NOT EXISTS bookmarks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
       book_id INTEGER,
@@ -73,9 +74,8 @@ const initDB = () => {
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id),
       FOREIGN KEY (book_id) REFERENCES books(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS reading_progress (
+    )`,
+    `CREATE TABLE IF NOT EXISTS reading_progress (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
       book_id INTEGER,
@@ -84,9 +84,8 @@ const initDB = () => {
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id),
       FOREIGN KEY (book_id) REFERENCES books(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS translate_history (
+    )`,
+    `CREATE TABLE IF NOT EXISTS translate_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
       source_text TEXT,
@@ -95,9 +94,8 @@ const initDB = () => {
       target_language TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS flashcard_sets (
+    )`,
+    `CREATE TABLE IF NOT EXISTS flashcard_sets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
       name TEXT,
@@ -106,18 +104,16 @@ const initDB = () => {
       target_language TEXT DEFAULT 'en',
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS flashcards (
+    )`,
+    `CREATE TABLE IF NOT EXISTS flashcards (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       set_id INTEGER,
       source_text TEXT,
       translated_text TEXT,
       is_learned INTEGER DEFAULT 0,
       FOREIGN KEY (set_id) REFERENCES flashcard_sets(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS ocr_history (
+    )`,
+    `CREATE TABLE IF NOT EXISTS ocr_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
       image_url TEXT,
@@ -126,9 +122,8 @@ const initDB = () => {
       language TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS audio_history (
+    )`,
+    `CREATE TABLE IF NOT EXISTS audio_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
       file_url TEXT,
@@ -137,9 +132,8 @@ const initDB = () => {
       language TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS tts_history (
+    )`,
+    `CREATE TABLE IF NOT EXISTS tts_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
       text TEXT,
@@ -147,9 +141,8 @@ const initDB = () => {
       audio_url TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS summarize_history (
+    )`,
+    `CREATE TABLE IF NOT EXISTS summarize_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
       source_text TEXT,
@@ -157,49 +150,48 @@ const initDB = () => {
       compression_ratio INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS search_history (
+    )`,
+    `CREATE TABLE IF NOT EXISTS search_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
       query TEXT,
       filters TEXT DEFAULT '{}',
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS roles (
+    )`,
+    `CREATE TABLE IF NOT EXISTS roles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT UNIQUE NOT NULL,
       permissions TEXT DEFAULT '[]'
-    );
-
-    CREATE TABLE IF NOT EXISTS user_roles (
+    )`,
+    `CREATE TABLE IF NOT EXISTS user_roles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
       role_id INTEGER,
       UNIQUE(user_id, role_id),
       FOREIGN KEY (user_id) REFERENCES users(id),
       FOREIGN KEY (role_id) REFERENCES roles(id)
-    );
-  `);
+    )`,
+  ], 'write');
 
-  const roleCount = db.prepare('SELECT COUNT(*) as c FROM roles').get();
-  if (roleCount.c === 0) {
-    db.prepare("INSERT INTO roles (name, permissions) VALUES ('admin', '[\"all\"]')").run();
-    db.prepare("INSERT INTO roles (name, permissions) VALUES ('editor', '[\"books.create\",\"books.edit\",\"books.delete\"]')").run();
-    db.prepare("INSERT INTO roles (name, permissions) VALUES ('user', '[\"books.read\",\"translate\",\"ocr\",\"tts\",\"summarize\",\"flashcards\"]')").run();
+  const roleCount = await db.execute('SELECT COUNT(*) as c FROM roles');
+  if (roleCount.rows[0].c === 0) {
+    await db.batch([
+      { sql: "INSERT INTO roles (name, permissions) VALUES ('admin', '[\"all\"]')", args: [] },
+      { sql: "INSERT INTO roles (name, permissions) VALUES ('editor', '[\"books.create\",\"books.edit\",\"books.delete\"]')", args: [] },
+      { sql: "INSERT INTO roles (name, permissions) VALUES ('user', '[\"books.read\",\"translate\",\"ocr\",\"tts\",\"summarize\",\"flashcards\"]')", args: [] },
+    ], 'write');
   }
 
-  const adminCount = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
-  if (!adminCount) {
+  const adminCheck = await db.execute({ sql: 'SELECT id FROM users WHERE username = ?', args: ['admin'] });
+  if (adminCheck.rows.length === 0) {
     const hash = bcrypt.hashSync('admin123', 10);
-    db.prepare('INSERT INTO users (username, email, password, full_name, is_superuser) VALUES (?, ?, ?, ?, ?)').run('admin', 'admin@etamil.app', hash, 'Admin User', 1);
-    db.prepare('INSERT INTO users (username, email, password, full_name) VALUES (?, ?, ?, ?)').run('demo', 'demo@etamil.app', bcrypt.hashSync('demo123', 10), 'Demo User');
+    await db.execute({ sql: 'INSERT INTO users (username, email, password, full_name, is_superuser) VALUES (?, ?, ?, ?, ?)', args: ['admin', 'admin@etamil.app', hash, 'Admin User', 1] });
+    await db.execute({ sql: 'INSERT INTO users (username, email, password, full_name) VALUES (?, ?, ?, ?)', args: ['demo', 'demo@etamil.app', bcrypt.hashSync('demo123', 10), 'Demo User'] });
   }
 
-  const catCount = db.prepare('SELECT COUNT(*) as c FROM categories').get();
-  if (catCount.c === 0) {
+  const catCount = await db.execute('SELECT COUNT(*) as c FROM categories');
+  if (catCount.rows[0].c === 0) {
     const catData = [
       ['தமிழ் இலக்கியம்', 'Tamil Literature'],
       ['கதைகள்', 'Stories'],
@@ -210,12 +202,13 @@ const initDB = () => {
       ['English Books', 'English Books'],
       ['குழந்தை இலக்கியம்', 'Children Literature'],
     ];
-    const insert = db.prepare('INSERT INTO categories (name, name_en) VALUES (?, ?)');
-    for (const [n, ne] of catData) insert.run(n, ne);
+    for (const [n, ne] of catData) {
+      await db.execute({ sql: 'INSERT INTO categories (name, name_en) VALUES (?, ?)', args: [n, ne] });
+    }
   }
 
-  const bookCount = db.prepare('SELECT COUNT(*) as c FROM books').get();
-  if (bookCount.c === 0) {
+  const bookCount = await db.execute('SELECT COUNT(*) as c FROM books');
+  if (bookCount.rows[0].c === 0) {
     const books = [
       ['தமிழ் இலக்கிய வரலாறு', 'தமிழ் இலக்கிய வரலாறு', 'Dr. M. Varadharajan', 'ம. வரதராஜன்', 'A comprehensive history of Tamil literature.', 1, 'ta', 'approved'],
       ['Silappadikaram', 'சிலப்பதிகாரம்', 'Ilango Adigal', 'இளங்கோ அடிகள்', 'One of the five great epics of Tamil literature.', 1, 'ta', 'approved'],
@@ -228,28 +221,30 @@ const initDB = () => {
       ['English Grammar for Tamil Speakers', null, 'R. K. Venkatesan', null, 'Learn English grammar with Tamil explanations.', 7, 'en', 'approved'],
       ['Children Tamil Stories', 'குழந்தை கதைகள்', 'A. C. S. M. Academy', null, 'Moral stories for children in Tamil.', 8, 'ta', 'approved'],
     ];
-    const insert = db.prepare('INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-    for (const b of books) insert.run(...b);
+    for (const b of books) {
+      await db.execute({ sql: 'INSERT INTO books (title, title_ta, author, author_ta, description, category_id, language, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', args: b });
+    }
   }
 };
 
-const query = (sql, params = []) => {
-  const stmt = db.prepare(sql);
-  const rows = stmt.all(...params);
-  return rows || [];
+const query = async (sql, params = []) => {
+  const result = await db.execute({ sql, args: params });
+  return result.rows || [];
 };
 
-const queryOne = (sql, params = []) => {
-  return db.prepare(sql).get(...params) || null;
+const queryOne = async (sql, params = []) => {
+  const result = await db.execute({ sql, args: params });
+  return result.rows[0] || null;
 };
 
-const run = (sql, params = []) => {
-  return db.prepare(sql).run(...params);
+const run = async (sql, params = []) => {
+  const result = await db.execute({ sql, args: params });
+  return result;
 };
 
-const insert = (sql, params = []) => {
-  const info = db.prepare(sql).run(...params);
-  return info.lastInsertRowid;
+const insert = async (sql, params = []) => {
+  const result = await db.execute({ sql, args: params });
+  return result.lastInsertRowid !== undefined ? Number(result.lastInsertRowid) : 0;
 };
 
 module.exports = { initDB, query, queryOne, run, insert };
