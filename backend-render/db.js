@@ -146,10 +146,14 @@ const initDB = async () => {
 };
 
 const ensureInit = async () => {
-  if (!initialized) {
-    if (!initPromise) initPromise = initDB();
-    await initPromise;
+  if (initialized) return;
+  if (!initPromise) {
+    initPromise = initDB().then(() => { initialized = true; }).catch(() => {});
   }
+  await Promise.race([
+    initPromise,
+    new Promise(r => setTimeout(r, 8000)),
+  ]);
 };
 
 const query = async (sql, params = []) => {
