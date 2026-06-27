@@ -408,7 +408,10 @@ app.post('/api/translate/text', auth, [
         const sl = source_language || (/[\u0B80-\u0BFF]/.test(text) ? 'ta' : 'en');
         const pair = sl + '|' + tl;
         const url = 'https://api.mymemory.translated.net/get?q=' + q + '&langpair=' + pair + '&de=simonpetercys@gmail.com';
-        const r = await fetch(url);
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 5000);
+        const r = await fetch(url, { signal: controller.signal });
+        clearTimeout(tid);
         const j = await r.json();
         const myTxt = j.responseData && j.responseData.translatedText;
         if (myTxt && myTxt !== text && !myTxt.includes('INVALID') && !myTxt.includes('PLEASE SELECT') && !myTxt.includes('SELECT TWO')) {
@@ -450,18 +453,6 @@ app.post('/api/tts/synthesize', auth, [
   await insert('INSERT INTO tts_history (user_id, text, language, audio_url) VALUES (?, ?, ?, ?)',
     [req.user.id, text, language, fileUrl]);
   res.json({ file_url: fileUrl, duration_seconds: 5.2 });
-});
-
-// --- Debug: test MyMemory directly from server ---
-app.post('/api/debug/mymemory', async (req, res) => {
-  try {
-    const q = encodeURIComponent(req.body.text || 'hello');
-    const pair = req.body.pair || 'ta|en';
-    const url = 'https://api.mymemory.translated.net/get?q=' + q + '&langpair=' + pair + '&de=simonpetercys@gmail.com';
-    const r = await fetch(url);
-    const j = await r.json();
-    res.json({ url, responseData: j.responseData, status: j.responseStatus, quota: j.quotaFinished });
-  } catch (e) { res.json({ error: e.message }); }
 });
 
 // --- Summarize ---
