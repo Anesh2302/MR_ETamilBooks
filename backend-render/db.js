@@ -20,13 +20,12 @@ function toTypedArgs(args) {
 }
 
 function tursoReq(sql, params) {
-  const requests = [{ type: 'execute', stmt: { sql, args: toTypedArgs(params) } }, { type: 'close' }];
-  const body = JSON.stringify({ requests });
+  const body = JSON.stringify({ stmt: sql, args: (params || []).map(a => a) });
 
   return new Promise((resolve, reject) => {
     const req = https.request({
       hostname: apiHost,
-      path: '/v2/pipeline',
+      path: '/v1/execute',
       method: 'POST',
       headers: {
         Authorization: `Bearer ${TURSO_DB_TOKEN}`,
@@ -52,27 +51,14 @@ function tursoReq(sql, params) {
   });
 }
 
-function getResult(resp) {
-  if (!resp || !resp.results || !resp.results[0]) return null;
-  const r = resp.results[0];
-  if (r.type === 'error') throw new Error(r.error ? r.error.message : 'Turso error');
-  if (r.response && r.response.result) return r.response.result;
-  return null;
-}
-
 function parseRows(resp) {
-  const result = getResult(resp);
-  if (!result || !result.cols) return [];
-  const cols = result.cols;
-  const rows = result.rows || [];
+  if (!resp || resp.success === false || !resp.results || !resp.results.columns) return [];
+  const cols = resp.results.columns;
+  const rows = resp.results.rows || [];
   return rows.map(row => {
     const obj = {};
-    cols.forEach((col, i) => {
-      const cell = row[i];
-      if (cell === null || cell === undefined) obj[col.name] = null;
-      else if (col.type === 'integer') obj[col.name] = Number(cell);
-      else if (col.type === 'real') obj[col.name] = Number(cell);
-      else obj[col.name] = String(cell);
+    cols.forEach((colName, i) => {
+      obj[colName] = row[i] === null || row[i] === undefined ? null : row[i];
     });
     return obj;
   });
@@ -84,9 +70,8 @@ function parseRow(resp) {
 }
 
 function getInsertId(resp) {
-  const result = getResult(resp);
-  if (result && result.last_insert_rowid !== null && result.last_insert_rowid !== undefined) {
-    return Number(result.last_insert_rowid);
+  if (resp && resp.meta && resp.meta.last_row_id !== null && resp.meta.last_row_id !== undefined) {
+    return Number(resp.meta.last_row_id);
   }
   return 0;
 }
@@ -162,13 +147,5 @@ const insert = async (sql, params = []) => {
   }
 };
 
-if (process.env.VERCEL) {
-  tursoReq("INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", ['TestCat', 'TestCat EN']).then(r => {
-    tursoReq("SELECT * FROM categories WHERE name = ?", ['TestCat']).then(r2 => {
-      console.log('TURSO TEST: ' + JSON.stringify(parseRows(r2)));
-    }).catch(e => console.error('TURSO TEST SELECT FAIL:', e.message));
-  }).catch(e => console.error('TURSO TEST INSERT FAIL:', e.message));
-}
-
-console.log('db.js v5');
+console.log('db.js v6 v1-api');
 module.exports = { initDB, query, queryOne, run, insert };
