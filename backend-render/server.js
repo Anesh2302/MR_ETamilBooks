@@ -340,17 +340,43 @@ const LOCAL_TRANSLATIONS = {
         'author': 'ஆசிரியர்', 'category': 'வகை', 'search': 'தேடல்',
         'view': 'பார்வை', 'all': 'அனைத்தும்', 'more': 'மேலும்',
         'learn': 'கற்றல்', 'study': 'படிப்பு', 'knowledge': 'அறிவு',
+    },
+    'en': {  // Tamil→English reverse lookup
+        'வணக்கம்': 'Hello', 'நன்றி': 'Thank you', 'வரவேற்கிறோம்': 'Welcome',
+        'நல்ல': 'Good', 'புத்தகம்': 'Book', 'புத்தகங்கள்': 'Books',
+        'படி': 'Read', 'படித்தல்': 'Reading', 'நூலகம்': 'Library',
+        'பதிவிறக்கம்': 'Download', 'கோப்பு': 'File', 'இலவசம்': 'Free',
+        'கல்வி': 'Education', 'கதை': 'Story', 'கதைகள்': 'Stories',
+        'நாவல்': 'Novel', 'கவிதை': 'Poetry', 'வரலாறு': 'History',
+        'அறிவியல்': 'Science', 'குழந்தைகள்': 'Children', 'சமயம்': 'Religion',
+        'தத்துவம்': 'Philosophy', 'தமிழ்': 'Tamil', 'ஆங்கிலம்': 'English',
+        'ஆசிரியர்': 'Author', 'வகை': 'Category', 'தேடல்': 'Search',
+        'கற்றல்': 'Learn', 'படிப்பு': 'Study', 'அறிவு': 'Knowledge',
+        'சிறுகதை': 'Short Story', 'இலக்கியம்': 'Literature',
     }
 };
 
-function localTranslate(text, targetLang) {
-    if (targetLang !== 'ta') return null;
-    const lower = text.toLowerCase().trim();
-    if (LOCAL_TRANSLATIONS.ta[lower]) return LOCAL_TRANSLATIONS.ta[lower];
-    // Try prefix matching
-    for (const [en, ta] of Object.entries(LOCAL_TRANSLATIONS.ta)) {
-        if (lower.startsWith(en) || lower.includes(en)) {
-            return text.replace(new RegExp(en, 'gi'), ta);
+function localTranslate(text, targetLang, sourceLang) {
+    if (targetLang === 'ta' && sourceLang !== 'ta') {
+        // English→Tamil
+        const lower = text.toLowerCase().trim();
+        if (LOCAL_TRANSLATIONS.ta[lower]) return LOCAL_TRANSLATIONS.ta[lower];
+        for (const [en, ta] of Object.entries(LOCAL_TRANSLATIONS.ta)) {
+            if (lower.startsWith(en) || lower.includes(en)) {
+                return text.replace(new RegExp(en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ta);
+            }
+        }
+        return null;
+    }
+    if (targetLang === 'en') {
+        // Tamil→English (direct lookup)
+        const trimmed = text.trim();
+        if (LOCAL_TRANSLATIONS.en[trimmed]) return LOCAL_TRANSLATIONS.en[trimmed];
+        // Try partial match for longer texts containing known words
+        for (const [ta, en] of Object.entries(LOCAL_TRANSLATIONS.en)) {
+            if (trimmed.includes(ta)) {
+                return trimmed.replace(new RegExp(ta.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), en);
+            }
         }
     }
     return null;
@@ -367,25 +393,24 @@ app.post('/api/translate/text', auth, [
     let translated = null;
     let method = 'none';
     // Try local translation first (no network dependency)
-    const local = localTranslate(text, tl);
+    const local = localTranslate(text, tl, source_language);
     if (local) { translated = local; method = 'local'; }
     // Try MyMemory API with timeout
     if (!translated) {
       try {
+        const sl = source_language || (tl === 'en' ? 'ta' : 'en');
+        const apiUrl = 'https://api.mymemory.translated.net/get' +
+          '?q=' + encodeURIComponent(text.slice(0, 500)) +
+          '&langpair=' + sl + '|' + tl +
+          '&mt=1&de=simonpetercys@gmail.com';
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 4000);
-        const r = await fetch(
-          (() => {
-            const sl = source_language || (/[\u0B80-\u0BFF]/.test(text) ? 'ta' : 'en');
-            return 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text.slice(0, 500)) +
-              '&langpair=' + sl + '|' + tl + '&de=simonpetercys@gmail.com';
-          })(),
-          { signal: controller.signal }
-        );
+        const r = await fetch(apiUrl, { signal: controller.signal });
         clearTimeout(timeoutId);
         const j = await r.json();
-        if (j.responseData && j.responseData.translatedText && j.responseData.translatedText !== text) {
-          translated = j.responseData.translatedText;
+        const myTxt = j.responseData && j.responseData.translatedText;
+        if (myTxt && myTxt !== text && !myTxt.includes('INVALID SOURCE') && !myTxt.includes('SELECT TWO DISTINCT')) {
+          translated = myTxt;
           method = 'mymemory';
         }
       } catch {}
