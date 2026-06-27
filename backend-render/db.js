@@ -188,5 +188,15 @@ const insert = async (sql, params = []) => {
   }
 };
 
+// module-level Turso test
+if (process.env.VERCEL) {
+  tursoReq([{ sql: "SELECT 1 as test" }]).then(r => {
+    const res = getResult(r);
+    console.log('TURSO TEST OK:', JSON.stringify(res).substring(0, 200));
+  }).catch(e => {
+    console.error('TURSO TEST FAIL:', e.message);
+  });
+}
+
 console.log('db.js v4 with seed data');
 module.exports = { initDB, query, queryOne, run, insert };
