@@ -115,15 +115,20 @@ const initDB = async () => {
         const r = await c.execute({ sql: "SELECT id FROM categories WHERE name_en = ?", args: [nameEn] });
         return r.rows && r.rows[0] ? Number(r.rows[0].id) : null;
       };
-      const sampleBooks = [
-        ['திருக்குறள்', 'Thirukkural', 'திருவள்ளுவர்', 'Thiruvalluvar', 'ta', 'திருக்குறள் அல்லது திருவள்ளுவர் அறநூல்', 'Ancient Tamil ethical text with 1330 couplets', 'pdf', await getCatId('Tamil Literature')],
-        ['பாரதியார் கவிதைகள்', 'Bharathiyar Poems', 'மகாகவி பாரதியார்', 'Mahakavi Bharathiyar', 'ta', 'மகாகவி சுப்பிரமணிய பாரதியின் தேர்ந்தெடுக்கப்பட்ட கவிதைகள்', 'Selected poems of the great Tamil poet', 'pdf', await getCatId('Poetry')],
-        ['The Alchemist', 'The Alchemist', 'Paulo Coelho', 'Paulo Coelho', 'en', 'A mystical story about following your dreams', 'A mystical story about following your dreams', 'pdf', await getCatId('Philosophy')],
-      ];
-      for (const [titleTa, titleEn, authorTa, authorEn, lang, descTa, descEn, fileType, catId] of sampleBooks) {
-        if (catId) {
-          await c.execute({ sql: "INSERT INTO books (title, title_ta, author, author_ta, language, description, description_ta, file_type, category_id, uploaded_by, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", args: [titleEn, titleTa, authorEn, authorTa, lang, descEn, descTa, fileType, catId, 1, 'approved'] });
+      const catId = async (name) => { const r = await c.execute({ sql: "SELECT id FROM categories WHERE name_en = ?", args: [name] }); return r.rows && r.rows[0] ? Number(r.rows[0].id) : null; };
+      const cLiterature = await catId('Tamil Literature');
+      const cPoetry = await catId('Poetry');
+      const cPhilosophy = await catId('Philosophy');
+      if (cLiterature && cPoetry && cPhilosophy) {
+        const sampleBooks = [
+          ['திருக்குறள் - அறத்துப்பால்', 'Thirukkural - Book of Virtue', 'திருவள்ளுவர்', 'Thiruvalluvar', 'ta', 'அறம், பொருள், இன்பம் ஆகிய முப்பால்களைக் கொண்ட திருக்குறள் மூலம் வாழ்க்கை நெறிகளை விளக்கும் அறநூல்.', 'Ancient Tamil ethical text with 1330 couplets covering virtue, wealth and love.', cLiterature, 'ta', 'திருக்குறள் மூலமும் உரையும்\n\nஅறத்துப்பால் - கடவுள் வாழ்த்து\n\nஅகர முதல எழுத்தெல்லாம் ஆதிபகவன் முதற்றே உலகு.\n\nதிருவள்ளுவர் இயற்றிய திருக்குறள் தமிழ் இலக்கியத்தின் மிகச் சிறந்த நூல்களில் ஒன்றாகும். இது 1330 குறள்களைக் கொண்டு அறம், பொருள், இன்பம் ஆகிய முப்பால்களாகப் பிரிக்கப்பட்டுள்ளது.\n\nஇந்நூல் உலகப் பொதுமறையாகக் கருதப்படுகிறது. திருக்குறள் வாழ்க்கையின் அனைத்து அம்சங்களையும் சுட்டிக்காட்டும் ஒரு வழிகாட்டி நூலாகும்.'],
+          ['பாரதியார் கவிதைகள்', 'Bharathiyar Poems', 'மகாகவி பாரதியார்', 'Mahakavi Bharathiyar', 'ta', 'சுப்பிரமணிய பாரதியின் தேர்ந்தெடுக்கப்பட்ட புரட்சிக் கவிதைகள்.', 'Selected revolutionary poems by the great Tamil poet Bharathiyar.', cPoetry, 'ta', 'பாரதியார் கவிதைகள்\n\nசிந்தனை செய் மனமே!\nசிந்தனை செய் மனமே!\nசிந்தனை செய்யிலே சித்தம் தெளியுமடா!\n\nமகாகவி சுப்பிரமணிய பாரதி (1882-1921) தமிழின் மிகச் சிறந்த கவிஞர்களில் ஒருவர். இவர் தேசியம், சமூக சீர்திருத்தம், பெண் விடுதலை ஆகியவற்றைப் பற்றி எழுதினார்.'],
+          ['The Alchemist', 'The Alchemist', 'Paulo Coelho', 'Paulo Coelho', 'en', 'ஒரு மேய்ப்பனின் கனவுகளைத் தேடும் பயணம் குறித்த அற்புதமான கதை.', 'A magical story about following your dreams and listening to your heart.', cPhilosophy, 'en', 'The Alchemist\n\nBy Paulo Coelho\n\n"The boy\'s name was Santiago. He had studied Latin, Spanish, and theology, but his dream of traveling the world led him to become a shepherd."\n\n"When you want something, all the universe conspires in helping you to achieve it."\n\n"People learn, early in their lives, what is their reason for being," said the old man. "Maybe that\'s why they give up on it so early, too."'],
+        ];
+        for (const [titleTa, titleEn, authorTa, authorEn, lang, descTa, descEn, cid, contentLang, contentText] of sampleBooks) {
+          await c.execute({ sql: "INSERT INTO books (title, title_ta, author, author_ta, language, description, description_ta, file_type, category_id, uploaded_by, status, content_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", args: [titleEn, titleTa, authorEn, authorTa, lang, descEn, descTa, 'pdf', cid, 1, 'approved', contentText] });
         }
+      }
       }
     }
     initialized = true;

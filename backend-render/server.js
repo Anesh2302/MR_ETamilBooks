@@ -238,7 +238,11 @@ app.get('/api/books/:id', [
   if (!book) return res.status(404).json({ detail: 'Book not found' });
   await run('UPDATE books SET views_count = views_count + 1 WHERE id = ?', [Number(req.params.id)]);
   book.views_count = (book.views_count || 0) + 1;
-  book.content_text = 'Full book content would be displayed here.';
+  if (!book.content_text) {
+    book.content_text = book.language === 'ta'
+      ? `${book.description_ta || book.description}\n\nஇது ஒரு மாதிரி உள்ளடக்கம். முழு புத்தகத்தையும் படிக்க விரைவில் கிடைக்கும்.`
+      : `${book.description || book.description_ta}\n\nThis is sample content. Full book will be available soon.`;
+  }
   res.json(book);
 });
 

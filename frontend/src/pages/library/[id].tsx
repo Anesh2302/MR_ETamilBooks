@@ -79,8 +79,9 @@ export default function BookDetail() {
     );
   }
 
-  const hasFile = book.file_url && book.file_type;
-  const absFileUrl = `${API_URL}${book.file_url}`;
+  const hasFile = !!(book.file_url && book.file_type);
+  const hasContent = !!(book.content_text);
+  const absFileUrl = book.file_url ? `${API_URL}${book.file_url}` : '';
   const absDownloadUrl = `${API_URL}/api/books/${book.id}/download`;
 
   const scrollToReader = () => {
@@ -101,7 +102,7 @@ export default function BookDetail() {
                 <span className="text-6xl">📖</span>
               </div>
               <div className="mt-4 flex flex-col gap-2">
-                {hasFile && (
+                {(hasFile || hasContent) && (
                   <button onClick={scrollToReader} className="btn-primary text-sm w-full text-center">Read Online</button>
                 )}
                 <a href={absDownloadUrl} className="btn-outline text-sm w-full text-center">Download</a>
@@ -150,7 +151,7 @@ export default function BookDetail() {
           </div>
         </div>
 
-        {hasFile && (
+        {(hasFile || hasContent) && (
           <div ref={readerRef} className="mt-8 card-glass animate-fade-in-up">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-4">
@@ -165,16 +166,24 @@ export default function BookDetail() {
                   </div>
                 )}
               </div>
-              <a href={absFileUrl} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 text-sm text-tamil-400 hover:text-tamil-300 transition-colors">
-                Open in new tab <FiExternalLink size={14} />
-              </a>
+              {hasFile && (
+                <a href={absFileUrl} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-sm text-tamil-400 hover:text-tamil-300 transition-colors">
+                  Open in new tab <FiExternalLink size={14} />
+                </a>
+              )}
             </div>
-            <iframe src={absFileUrl} className="w-full h-[80vh] rounded-xl" style={{ border: '1px solid var(--border-color)' }} title={book.title} />
+            {hasFile ? (
+              <iframe src={absFileUrl} className="w-full h-[80vh] rounded-xl" style={{ border: '1px solid var(--border-color)' }} title={book.title} />
+            ) : (
+              <div className="w-full h-[80vh] rounded-xl p-8 overflow-y-auto whitespace-pre-wrap leading-relaxed" style={{ border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+                {book.content_text}
+              </div>
+            )}
           </div>
         )}
 
-        {!hasFile && (
+        {!hasFile && !hasContent && (
           <div className="mt-8 card-glass animate-fade-in-up text-center py-12">
             <span className="text-5xl block mb-4">📝</span>
             <h3 className="text-xl font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>Content Not Available Yet</h3>
