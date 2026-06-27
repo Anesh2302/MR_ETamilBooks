@@ -375,9 +375,11 @@ app.post('/api/translate/text', auth, [
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 4000);
         const r = await fetch(
-          'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text.slice(0, 500)) +
-          '&langpair=' + (source_language || 'auto') + '|' + tl +
-          '&de=simonpetercys@gmail.com',
+          (() => {
+            const sl = source_language || (/[\u0B80-\u0BFF]/.test(text) ? 'ta' : 'en');
+            return 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text.slice(0, 500)) +
+              '&langpair=' + sl + '|' + tl + '&de=simonpetercys@gmail.com';
+          })(),
           { signal: controller.signal }
         );
         clearTimeout(timeoutId);
