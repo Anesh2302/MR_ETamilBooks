@@ -328,13 +328,9 @@ app.post('/api/translate/text', auth, [
   const { text, source_language, target_language } = req.body;
   let translated;
   try {
-    const r = await fetch('https://libretranslate.com/translate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: text, source: source_language || 'auto', target: target_language || 'en' }),
-    });
+    const r = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${source_language || 'auto'}|${target_language || 'en'}`);
     const j = await r.json();
-    translated = j.translatedText || `[${target_language?.toUpperCase()}] ${text}`;
+    translated = j.responseData?.translatedText || `[${target_language?.toUpperCase()}] ${text}`;
   } catch {
     translated = `[${target_language?.toUpperCase()}] ${text}`;
   }
