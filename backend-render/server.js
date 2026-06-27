@@ -566,7 +566,7 @@ app.post('/api/admin/scrape-links', auth, adminOnly, async (req, res) => {
       const href = $(el).attr('href');
       if (href) links.push(href);
     });
-    res.json({ page: pageNum, links: [...new Set(links)], htmlLen: html.length, fetchMs, snippet: html.slice(0, 200) });
+    res.json({ page: pageNum, links: [...new Set(links)], htmlLen: html.length, fetchMs });
   } catch (e) {
     res.status(500).json({ detail: e.message });
   }

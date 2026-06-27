@@ -1,4 +1,3 @@
-// Scraper for freetamilebooks.com - run: node scraper.js
 const { createClient } = require('@libsql/client/http');
 const cheerio = require('cheerio');
 
@@ -20,15 +19,38 @@ const CAT_MAP = {
   'விளையாட்டு': 'Education', 'பயணம்': 'Tamil Literature',
   'நாடகங்கள்': 'Tamil Literature', 'தேர்ந்தெடுத்த நூல்கள்': 'Tamil Literature',
   'விருது வென்ற நூல்கள்': 'Tamil Literature', 'வரலாற்று நாவல்': 'History',
+  'நாவல்': 'Novel', 'நகைச்சுவை': 'Tamil Literature',
+  'ஆன்மிகம்': 'Religion', 'குறும்பதிவு': 'Tamil Literature',
+  'சிறுகதை': 'Short Story', 'கதைகள்': 'Tamil Literature',
+  'வாழ்க்கைவரலாறு': 'History', 'பாடல்கள்': 'Poetry',
+  'மின்னிதழ்': 'Tamil Literature', 'சுயசரிதை': 'History',
+  'இதழ்': 'Tamil Literature', 'ஆய்வு': 'Education',
+  'நேர்காணல்கள்': 'Tamil Literature', 'அறிவியல் கதைகள்': 'Science',
+  'சிறுவர் கதைகள்': 'Children', 'சிறுவர் பாடல்கள்': 'Children',
+  'சிறுவர்கதை': 'Children', 'நாடகம்': 'Tamil Literature',
 };
-
-const BLOCKED_CATS = ['நாவல்', 'நகைச்சுவை', 'ஆன்மிகம்', 'குறும்பதிவு'];
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+async function findLastPage() {
+  for (let p of [10, 20, 30, 40, 50, 60]) {
+    const url = 'https://freetamilebooks.com/ebooks/page/' + p + '/';
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const html = await res.text();
+      const $ = cheerio.load(html);
+      if ($('figure.wp-block-post-featured-image a[href*="/ebooks/"]').length === 0) return p - 1;
+    } catch { return p - 1; }
+  }
+  return 57;
+}
+
 async function getCatId(nameEn) {
   const r = await client.execute({ sql: "SELECT id FROM categories WHERE name_en = ?", args: [nameEn] });
-  return r.rows && r.rows[0] ? Number(r.rows[0].id) : null;
+  if (r.rows && r.rows[0]) return Number(r.rows[0].id);
+  // If category doesn't exist, insert it
+  const ir = await client.execute({ sql: "INSERT INTO categories (name, name_en) VALUES (?, ?)", args: [nameEn, nameEn] });
+  return Number(ir.lastInsertRowid);
 }
 
 async function scrapeBook(url) {
@@ -40,58 +62,40 @@ async function scrapeBook(url) {
     const titleTa = $('h1').first().text().trim();
     if (!titleTa || titleTa === 'eBooks') return null;
 
-    // Description
     let descTa = '';
     $('p').each((i, el) => {
       const t = $(el).text().trim();
       if (t.length > 60 && t.length < 800 && !descTa && !t.startsWith('Download') && !t.startsWith('The post')) descTa = t;
     });
 
-    // Author
     let authorTa = 'Free Tamil Ebooks';
     const bodyText = $('body').text();
     const am = bodyText.match(/ஆசிரியர்[^:]*:\s*([^\n<]+)/i);
     if (am) authorTa = am[1].trim();
 
-    // Categories from the post meta
     const cats = [];
     $('.taxonomy-category a, .wp-block-post-terms a').each((i, el) => cats.push($(el).text().trim()));
 
-    // Filter blocked categories
-    for (const c of cats) for (const b of BLOCKED_CATS) if (c.includes(b)) return null;
-
-    // Map to our categories
-    let mapped = null;
+    // Map category - fallback to Tamil Literature
+    let mapped = 'Tamil Literature';
     for (const c of cats) {
       for (const [ta, en] of Object.entries(CAT_MAP)) {
         if (c.includes(ta)) { mapped = en; break; }
       }
       if (mapped) break;
     }
-    if (!mapped) return null;
     const catId = await getCatId(mapped);
-    if (!catId) return null;
 
-    // Download URL from Download Manager buttons
     let fileUrl = '';
     $('a.dlm-download-link').each((i, el) => {
       const href = $(el).attr('href');
       const text = $(el).text();
       if (href && !fileUrl) {
-        if (text.includes('A4 PDF') || text.includes('a4 pdf')) {
+        if (text.includes('A4 PDF') || text.includes('a4 pdf') || text.includes('.pdf')) {
           fileUrl = href;
         }
       }
     });
-    // Fallback: any PDF link
-    if (!fileUrl) {
-      $('a.dlm-download-link').each((i, el) => {
-        const href = $(el).attr('href');
-        const text = $(el).text();
-        if (href && !fileUrl && text.includes('.pdf')) fileUrl = href;
-      });
-    }
-    // Last fallback: any download link
     if (!fileUrl) {
       $('a.dlm-download-link').each((i, el) => {
         const href = $(el).attr('href');
@@ -99,7 +103,6 @@ async function scrapeBook(url) {
       });
     }
 
-    // Cover image
     let coverUrl = '';
     $('img.wp-post-image, .wp-block-post-featured-image img').each((i, el) => {
       if (!coverUrl) coverUrl = $(el).attr('src') || '';
@@ -114,7 +117,7 @@ async function scrapeBook(url) {
       author: authorTa,
       authorTa,
       descTa,
-      descEn: 'Educational Tamil book: ' + titleTa,
+      descEn: 'Tamil book: ' + titleTa,
       catId,
       fileUrl,
       coverUrl,
@@ -150,15 +153,19 @@ async function main() {
   const existing = new Set(r.rows.map(r => r.title));
   console.log('Existing books in DB: ' + existing.size);
 
-  const MAX_PAGES = 57;
+  // Start from page 1 by default, or from env START_PAGE
+  const startPage = parseInt(process.env.START_PAGE || '1');
+  const MAX_PAGES = await findLastPage();
+  console.log('Start page: ' + startPage + ', detected pages: ' + MAX_PAGES);
   let added = 0;
-  for (let p = 1; p <= MAX_PAGES; p++) {
+
+  for (let p = startPage; p <= MAX_PAGES; p++) {
     console.log('\n--- Page ' + p + '/' + MAX_PAGES + ' ---');
     const links = await getPageLinks(p);
     console.log('  Books: ' + links.length);
 
     for (const link of links) {
-      await sleep(800);
+      await sleep(200);
       const book = await scrapeBook(link);
       if (!book) continue;
       if (existing.has(book.title)) continue;
@@ -175,7 +182,7 @@ async function main() {
         console.error('  DB ERR: ' + e.message.slice(0, 60));
       }
     }
-    await sleep(1000);
+    await sleep(500);
   }
   console.log('\n=== Done! Added ' + added + ' books ===');
 }
