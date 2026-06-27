@@ -22,19 +22,18 @@ const CORS_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:3000').split
 const isVercel = !!process.env.VERCEL;
 
 // --- Body parser ---
-// Vercel already provides req.body on some runtimes. Only parse if missing.
+// Read raw body immediately before any Express middleware can consume the stream
 app.use((req, res, next) => {
-  if (req.body && Object.keys(req.body).length > 0) return next();
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'DELETE') return next();
-  let data = '';
-  req.on('data', c => data += c);
+  const chunks = [];
+  req.on('data', c => chunks.push(c));
   req.on('end', () => {
-    if (data) {
-      try {
-        req.body = JSON.parse(data);
-      } catch {
+    const raw = Buffer.concat(chunks).toString('utf8');
+    req.rawBody = raw;
+    if (raw) {
+      try { req.body = JSON.parse(raw); } catch {
         try {
-          const params = new URLSearchParams(data);
+          const params = new URLSearchParams(raw);
           req.body = Object.fromEntries(params);
         } catch { req.body = {}; }
       }
