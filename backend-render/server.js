@@ -22,7 +22,6 @@ const CORS_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:3000').split
 const isVercel = !!process.env.VERCEL;
 
 // --- Body parser ---
-// Use body-parser + rawBody capture for Vercel compatibility
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
@@ -32,8 +31,8 @@ app.use(helmet({
   contentSecurityPolicy: false,
 }));
 
-// --- Compression ---
-app.use(compression());
+// --- Compression (skip on Vercel, can conflict with body stream) ---
+if (!isVercel) app.use(compression());
 
 // --- Trust proxy (for Render / reverse proxy) ---
 app.set('trust proxy', 1);
