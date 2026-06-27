@@ -243,9 +243,6 @@ export default function BookDetail() {
           <div ref={readerRef} className="card-glass p-6 animate-fade-in-up">
             <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
               <div className="flex items-center gap-3">
-                <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                  <FiBookOpen size={20} className="text-tamil-400" /> Reader
-                </h2>
                 <div className="flex rounded-xl overflow-hidden border p-0.5" style={{ borderColor: 'var(--border-color)', background: 'var(--input-bg)' }}>
                   {(['tamil', 'side-by-side', 'english'] as ViewMode[]).map((mode) => (
                     <button key={mode} onClick={() => setViewMode(mode)}
@@ -345,9 +342,6 @@ export default function BookDetail() {
         {hasFile && !hasContent && (
           <div ref={readerRef} className="card-glass p-6 animate-fade-in-up">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-              <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
-                <FiBookOpen size={20} className="text-tamil-400" /> Reader
-              </h2>
               <div className="flex items-center gap-2">
                 <a href={absFileUrl} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-tamil-400 hover:text-tamil-300 hover:bg-tamil-500/10 transition-all border border-transparent hover:border-tamil-500/20">
