@@ -18,7 +18,11 @@ function toTypedArgs(args) {
 }
 
 async function tursoReq(sql, params) {
-  const requests = [{ type: 'execute', stmt: { sql, args: toTypedArgs(params) } }, { type: 'close' }];
+  const requests = [
+    { type: 'execute', stmt: { sql, args: toTypedArgs(params) } },
+    { type: 'execute', stmt: { sql: 'COMMIT', args: [] } },
+    { type: 'close' },
+  ];
   const resp = await fetch(apiUrl, {
     method: 'POST',
     headers: {
