@@ -10,7 +10,7 @@ let initialized = false;
 let initPromise = null;
 
 async function tursoReq(sql, params) {
-  const isWrite = !/^\s*(SELECT|PRAGMA)\b/i.test(sql);
+  const isWrite = /^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql);
   const requests = isWrite
     ? [
         { type: 'execute', stmt: { sql: 'BEGIN', args: [] } },
