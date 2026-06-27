@@ -657,6 +657,95 @@ app.post('/api/admin/scrape-book', auth, adminOnly, async (req, res) => {
   }
 });
 
+// --- tamilbookspdf.com scraper ---
+const TBPS_GENRE_MAP = {
+    'Novels': 'Novel', 'Short Stories': 'Short Story', 'Historical': 'History',
+    'Fiction': 'Tamil Literature', 'Romantic': 'Novel', 'Adventure': 'Children',
+    'Biography': 'History', "Children's Books": 'Children', "Children\u2019s Books": 'Children',
+    'Classics': 'Tamil Literature', 'Education': 'Education', 'Fantasy': 'Children',
+    'Health Books': 'Science', 'Horror Books': 'Novel', 'Mystery': 'Novel',
+    'Philosophy': 'Philosophy', 'Poetry': 'Poetry', 'Poem': 'Poetry',
+    'Politics': 'History', 'Religious': 'Religion', 'Science Books': 'Science',
+    'Science Fiction': 'Science', 'Story Books': 'Short Story', 'Spiritual Books': 'Religion',
+    'Tamil Kids Books': 'Children', 'Thriller': 'Novel',
+};
+
+const TBPS_KNOWN_AUTHORS = new Set([
+    'Akila Govind', 'Amuthavalli Kalyanasundaram', 'Aruna Hari', 'Balakumaran',
+    'B. Jeyamohan', 'Jayakanthan', 'Kalki Krishnamurthy', 'Kannadasan',
+    'Madhan', 'Mythili Sampath', 'Na. Parthasarathy', 'Pattukkottai Prabakar',
+    'Payon', 'Premalatha Balasubramaniam', 'Ponniyin Selvan', 'R Maheshwari',
+    'Rajam Krishnan', 'Rajesh Kumar', 'Ramanichandran Novel', 'Sandilyan',
+    'Subha', 'Subashree Krishnaveni', 'Sujatha Rangarajan', 'Uma Balakumar',
+    'Uma Maheswari Krishnaswamy', 'Vaduvoor K.Duraiswamy Iyengar',
+    'Viji Vignesh', 'Yaddanapudi Sulochana Rani', 'Muthulakshmi Raghavan Novels',
+    'Periyar', 'Sujatha',
+]);
+
+app.post('/api/admin/tbps/scrape-page', auth, adminOnly, async (req, res) => {
+    try {
+        const page = req.body.page || 1;
+        const listUrl = page === 1 ? 'https://tamilbookspdf.com/books/' : 'https://tamilbookspdf.com/books/page/' + page + '/';
+        const listRes = await fetch(listUrl, { signal: AbortSignal.timeout(15000) });
+        const listHtml = await listRes.text();
+        const $ = cheerio.load(listHtml);
+        const bookLinks = [];
+        $('a[href*="/books/"]').each((i, el) => {
+            const href = $(el).attr('href');
+            const text = $(el).text().trim();
+            if (href && href.startsWith('https://tamilbookspdf.com/books/') && href !== 'https://tamilbookspdf.com/books/' && text.length > 3) {
+                if (!bookLinks.find(b => b.href === href)) bookLinks.push({ text, href });
+            }
+        });
+        const results = { page, total: bookLinks.length, imported: 0, skipped: 0, errors: [] };
+        for (const link of bookLinks) {
+            try {
+                const dup = await queryOne('SELECT id FROM books WHERE file_url = ?', [link.href]);
+                if (dup) { results.skipped++; continue; }
+                const bookRes = await fetch(link.href, { signal: AbortSignal.timeout(15000) });
+                const bookHtml = await bookRes.text();
+                const $b = cheerio.load(bookHtml);
+                const title = $b('h1').first().text().trim();
+                if (!title) { results.skipped++; continue; }
+                const pdfMatch = bookHtml.match(/https?:\/\/dl\.tamilbookspdf\.com\/[^"'\s]+\.pdf/);
+                const pdfUrl = pdfMatch ? pdfMatch[0] : '';
+                if (!pdfUrl) { results.skipped++; continue; }
+                const metaDesc = $b('meta[name="description"]').attr('content') || '';
+                const authorMatch = title.match(/\s+By\s+(.+)$/i);
+                const author = authorMatch ? authorMatch[1].trim() : '';
+                const ogImage = $b('meta[property="og:image"]').attr('content') || '';
+                let genre = 'Tamil Literature';
+                $b('li.menu-item-type-taxonomy.menu-item-object-genres').each((i, el) => {
+                    const cls = $b(el).attr('class') || '';
+                    const text = $b(el).text().trim();
+                    if ((cls.includes('current-menu-parent') || cls.includes('current-books-parent')) && text && !TBPS_KNOWN_AUTHORS.has(text)) {
+                        genre = text; return false;
+                    }
+                });
+                const mapped = TBPS_GENRE_MAP[genre] || 'Tamil Literature';
+                let catId = null;
+                const catRow = await queryOne('SELECT id FROM categories WHERE name_en = ?', [mapped]);
+                if (catRow) { catId = Number(catRow.id); } else {
+                    const ins = await insert("INSERT INTO categories (name, name_en, description, book_count) VALUES (?,?,?,0)", [mapped, mapped, '']);
+                    catId = Number(ins);
+                }
+                const slug = link.href.replace('https://tamilbookspdf.com/books/', '').replace(/\/$/, '');
+                const titleEn = slug.replace(/[^a-zA-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim() || title;
+                await insert(
+                    "INSERT INTO books (title, title_ta, author, language, description, file_type, file_url, cover_url, category_id, uploaded_by, status) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    [titleEn, title, author, 'ta', metaDesc, 'pdf', pdfUrl, ogImage, catId, 1, 'approved']
+                );
+                results.imported++;
+            } catch (e) {
+                results.errors.push(link.href + ': ' + e.message);
+            }
+        }
+        res.json(results);
+    } catch (e) {
+        res.status(500).json({ detail: e.message });
+    }
+});
+
 // --- Admin roles ---
 app.get('/api/admin/roles', auth, adminOnly, async (req, res) => {
   const roles = await query('SELECT * FROM roles');
