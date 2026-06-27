@@ -401,30 +401,22 @@ app.post('/api/translate/text', auth, [
     // Try local translation first (no network dependency)
     const local = localTranslate(text, tl, source_language);
     if (local) { translated = local; method = 'local'; }
-    // Try MyMemory API with timeout
+    // Try MyMemory API
     if (!translated) {
       try {
-        const sl = source_language || (tl === 'en' ? 'ta' : 'en');
-        const params = new URLSearchParams();
-        params.set('q', text.slice(0, 500));
-        params.set('langpair', sl + '|' + tl);
-        params.set('de', 'simonpetercys@gmail.com');
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
-        const r = await fetch('https://api.mymemory.translated.net/get?' + params.toString(), { signal: controller.signal });
-        clearTimeout(timeoutId);
+        const q = encodeURIComponent(text.slice(0, 500));
+        const sl = source_language || (/[\u0B80-\u0BFF]/.test(text) ? 'ta' : 'en');
+        const pair = sl + '|' + tl;
+        const url = 'https://api.mymemory.translated.net/get?q=' + q + '&langpair=' + pair + '&de=simonpetercys@gmail.com';
+        const r = await fetch(url);
         const j = await r.json();
-        if (j.responseStatus === 429 || (j.quotaFinished)) {
-          method = 'quota_exceeded';
-        } else if (j.responseData && j.responseData.translatedText) {
-          const myTxt = j.responseData.translatedText;
-          if (myTxt !== text && !myTxt.includes('INVALID') && !myTxt.includes('SELECT TWO')) {
-            translated = myTxt;
-            method = 'mymemory';
-          }
+        const myTxt = j.responseData && j.responseData.translatedText;
+        if (myTxt && myTxt !== text && !myTxt.includes('INVALID') && !myTxt.includes('PLEASE SELECT') && !myTxt.includes('SELECT TWO')) {
+          translated = myTxt;
+          method = 'mymemory';
         }
       } catch (e) {
-        method = 'error:' + (e.message || 'unknown');
+        method = 'mymemory_err';
       }
     }
     // Final fallback
