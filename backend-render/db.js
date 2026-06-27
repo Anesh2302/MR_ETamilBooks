@@ -110,25 +110,28 @@ const initDB = async () => {
       await c.execute({ sql: "INSERT INTO users (username, email, password, full_name, preferred_language, is_superuser, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)", args: ['simon', 'simonpetercys@gmail.com', adminPw, 'Simon', 'ta', 1, 1] });
     }
     await c.execute({ sql: "INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)", args: ['admin', '["all"]'] });
-    const bookCount = await c.execute({ sql: "SELECT COUNT(*) as cnt FROM books", args: [] });
-    if (!bookCount.rows || bookCount.rows[0].cnt === 0) {
-      const getCatId = async (nameEn) => {
-        const r = await c.execute({ sql: "SELECT id FROM categories WHERE name_en = ?", args: [nameEn] });
-        return r.rows && r.rows[0] ? Number(r.rows[0].id) : null;
-      };
-      const catId = async (name) => { const r = await c.execute({ sql: "SELECT id FROM categories WHERE name_en = ?", args: [name] }); return r.rows && r.rows[0] ? Number(r.rows[0].id) : null; };
-      const cLiterature = await catId('Tamil Literature');
-      const cPoetry = await catId('Poetry');
-      const cPhilosophy = await catId('Philosophy');
-      if (cLiterature && cPoetry && cPhilosophy) {
-        const sampleBooks = [
-          ['திருக்குறள் - அறத்துப்பால்', 'Thirukkural - Book of Virtue', 'திருவள்ளுவர்', 'Thiruvalluvar', 'ta', 'அறம், பொருள், இன்பம் ஆகிய முப்பால்களைக் கொண்ட திருக்குறள் மூலம் வாழ்க்கை நெறிகளை விளக்கும் அறநூல்.', 'Ancient Tamil ethical text with 1330 couplets covering virtue, wealth and love.', cLiterature, 'ta', 'திருக்குறள் மூலமும் உரையும்\n\nஅறத்துப்பால் - கடவுள் வாழ்த்து\n\nஅகர முதல எழுத்தெல்லாம் ஆதிபகவன் முதற்றே உலகு.\n\nதிருவள்ளுவர் இயற்றிய திருக்குறள் தமிழ் இலக்கியத்தின் மிகச் சிறந்த நூல்களில் ஒன்றாகும். இது 1330 குறள்களைக் கொண்டு அறம், பொருள், இன்பம் ஆகிய முப்பால்களாகப் பிரிக்கப்பட்டுள்ளது.\n\nஇந்நூல் உலகப் பொதுமறையாகக் கருதப்படுகிறது. திருக்குறள் வாழ்க்கையின் அனைத்து அம்சங்களையும் சுட்டிக்காட்டும் ஒரு வழிகாட்டி நூலாகும்.'],
-          ['பாரதியார் கவிதைகள்', 'Bharathiyar Poems', 'மகாகவி பாரதியார்', 'Mahakavi Bharathiyar', 'ta', 'சுப்பிரமணிய பாரதியின் தேர்ந்தெடுக்கப்பட்ட புரட்சிக் கவிதைகள்.', 'Selected revolutionary poems by the great Tamil poet Bharathiyar.', cPoetry, 'ta', 'பாரதியார் கவிதைகள்\n\nசிந்தனை செய் மனமே!\nசிந்தனை செய் மனமே!\nசிந்தனை செய்யிலே சித்தம் தெளியுமடா!\n\nமகாகவி சுப்பிரமணிய பாரதி (1882-1921) தமிழின் மிகச் சிறந்த கவிஞர்களில் ஒருவர். இவர் தேசியம், சமூக சீர்திருத்தம், பெண் விடுதலை ஆகியவற்றைப் பற்றி எழுதினார்.'],
-          ['The Alchemist', 'The Alchemist', 'Paulo Coelho', 'Paulo Coelho', 'en', 'ஒரு மேய்ப்பனின் கனவுகளைத் தேடும் பயணம் குறித்த அற்புதமான கதை.', 'A magical story about following your dreams and listening to your heart.', cPhilosophy, 'en', 'The Alchemist\n\nBy Paulo Coelho\n\n"The boy\'s name was Santiago. He had studied Latin, Spanish, and theology, but his dream of traveling the world led him to become a shepherd."\n\n"When you want something, all the universe conspires in helping you to achieve it."\n\n"People learn, early in their lives, what is their reason for being," said the old man. "Maybe that\'s why they give up on it so early, too."'],
-        ];
-        for (const [titleTa, titleEn, authorTa, authorEn, lang, descTa, descEn, cid, contentLang, contentText] of sampleBooks) {
-          await c.execute({ sql: "INSERT INTO books (title, title_ta, author, author_ta, language, description, description_ta, file_type, category_id, uploaded_by, status, content_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", args: [titleEn, titleTa, authorEn, authorTa, lang, descEn, descTa, 'pdf', cid, 1, 'approved', contentText] });
-        }
+    const getCatId = async (nameEn) => {
+      const r = await c.execute({ sql: "SELECT id FROM categories WHERE name_en = ?", args: [nameEn] });
+      return r.rows && r.rows[0] ? Number(r.rows[0].id) : null;
+    };
+    const cLiterature = await getCatId('Tamil Literature');
+    const cPoetry = await getCatId('Poetry');
+    const cPhilosophy = await getCatId('Philosophy');
+
+    // Update old books with content_text if missing
+    await c.execute({ sql: "UPDATE books SET content_text = ? WHERE title = ? AND (content_text IS NULL OR content_text = '')", args: ['திருக்குறள் மூலமும் உரையும்\n\nஅறத்துப்பால் - கடவுள் வாழ்த்து\n\nஅகர முதல எழுத்தெல்லாம் ஆதிபகவன் முதற்றே உலகு.\n\nதிருவள்ளுவர் இயற்றிய திருக்குறள் தமிழ் இலக்கியத்தின் மிகச் சிறந்த நூல்களில் ஒன்றாகும்.', 'Thirukkural'] });
+    await c.execute({ sql: "UPDATE books SET content_text = ? WHERE title = ? AND (content_text IS NULL OR content_text = '')", args: ['பாரதியார் கவிதைகள்\n\nசிந்தனை செய் மனமே!\nசிந்தனை செய் மனமே!\nசிந்தனை செய்யிலே சித்தம் தெளியுமடா!\n\nமகாகவி சுப்பிரமணிய பாரதி (1882-1921) தமிழின் மிகச் சிறந்த கவிஞர்களில் ஒருவர்.', 'Bharathiyar Poems'] });
+    await c.execute({ sql: "UPDATE books SET content_text = ? WHERE title = ? AND (content_text IS NULL OR content_text = '')", args: ['The Alchemist\n\nBy Paulo Coelho\n\n"The boy\'s name was Santiago..."\n\n"When you want something, all the universe conspires in helping you to achieve it."', 'The Alchemist'] });
+
+    // Insert new books if they don't exist
+    const existingTitles = (await c.execute({ sql: "SELECT title FROM books", args: [] })).rows.map(r => r.title);
+    const newBooks = [
+      ['நன்னூல் - தமிழ் இலக்கணம்', 'Nannool - Tamil Grammar', 'பவணந்தி முனிவர்', 'Pavanandi Munivar', 'ta', 'தொல்காப்பியத்தை அடிப்படையாகக் கொண்ட நன்னூல் தமிழ் இலக்கணத்தை எளிதாக விளக்குகிறது.', 'A comprehensive Tamil grammar text based on Tholkappiyam.', cLiterature, 'ta', 'நன்னூல்\n\nதமிழ் இலக்கணம்\n\nஎழுத்ததிகாரம்\n\nஉயிரெழுத்து: அ, ஆ, இ, ஈ, உ, ஊ, எ, ஏ, ஐ, ஒ, ஓ, ஔ\nமெய்யெழுத்து: க், ங், ச், ஞ், ட், ண், த், ந், ப், ம, ய், ர், ல், வ், ழ், ள்\n\nதமிழ் மொழி உலகின் மிகப் பழமையான மொழிகளில் ஒன்றாகும். இது சுமார் 5000 ஆண்டுகள் பழமையானது.'],
+      ['சிறுகதை தொகுப்பு', 'Short Story Collection', 'பல்வேறு ஆசிரியர்கள்', 'Various Authors', 'ta', 'தமிழ் இலக்கியத்தின் சிறந்த சிறுகதைகளின் தொகுப்பு.', 'Collection of the best short stories from Tamil literature.', cLiterature, 'ta', 'சிறுகதைகள்\n\n1. கடவுளும் கந்தசாமியும் - புதுமைப்பித்தன்\n\nகந்தசாமி சந்தோஷமாக இருந்தான்.\n\n2. பொன்னகரம் - ஜெயகாந்தன்\n\nபொன்னகரம் என்று ஒரு ஊர் இருந்தது.\n\n3. அக்கினி பிரவேசம் - மெளனி\n\nதீயில் விழுந்தான். சுற்றி நின்றவர்கள் பார்த்துக் கொண்டிருந்தனர்.'],
+    ];
+    for (const [titleTa, titleEn, authorTa, authorEn, lang, descTa, descEn, cid, clang, ctext] of newBooks) {
+      if (!existingTitles.includes(titleEn)) {
+        await c.execute({ sql: "INSERT INTO books (title, title_ta, author, author_ta, language, description, description_ta, file_type, category_id, uploaded_by, status, content_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", args: [titleEn, titleTa, authorEn, authorTa, lang, descEn, descTa, 'pdf', cid, 1, 'approved', ctext] });
       }
     }
     initialized = true;
