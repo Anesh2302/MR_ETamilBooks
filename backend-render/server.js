@@ -22,23 +22,9 @@ const CORS_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:3000').split
 const isVercel = !!process.env.VERCEL;
 
 // --- Body parser ---
-// On Vercel, body-parser's express.json() can conflict with the serverless runtime.
-// Save raw body first, then let body-parser handle it.
-app.use((req, res, next) => {
-  if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
-    let data = '';
-    req.on('data', c => data += c);
-    req.on('end', () => {
-      req.rawBody = data;
-      if (data && req.is('json')) {
-        try { req.body = JSON.parse(data); } catch {}
-      }
-      next();
-    });
-  } else {
-    next();
-  }
-});
+// Use body-parser + rawBody capture for Vercel compatibility
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // --- Security headers ---
 app.use(helmet({
