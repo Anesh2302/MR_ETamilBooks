@@ -6,6 +6,13 @@ import Footer from './Footer';
 export default function Layout({ children, title }: { children: ReactNode; title?: string }) {
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg-primary)' }}>
+      <div className="bg-orbs">
+        <div className="orb animate-orb" />
+        <div className="orb animate-orb" />
+        <div className="orb animate-orb" />
+        <div className="orb animate-orb" />
+        <div className="orb animate-orb" />
+      </div>
       <Head>
         <title>{title ? `${title} | Tamil E-Book Translator` : 'Tamil E-Book Translator'}</title>
       </Head>
