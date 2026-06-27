@@ -91,7 +91,14 @@ const initDB = async () => {
     for (const sql of SCHEMA) {
       await c.execute({ sql, args: [] });
     }
-    await c.execute({ sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name ON categories(name)", args: [] }).catch(()=>{});
+    const dupes = await c.execute({ sql: "SELECT name, COUNT(*) as cnt, MIN(id) as keep_id FROM categories GROUP BY name HAVING cnt > 1", args: [] });
+    if (dupes.rows && dupes.rows.length > 0) {
+      for (const row of dupes.rows) {
+        await c.execute({ sql: "UPDATE books SET category_id = ? WHERE category_id IN (SELECT id FROM categories WHERE name = ? AND id != ?)", args: [Number(row.keep_id), row.name, Number(row.keep_id)] });
+        await c.execute({ sql: "DELETE FROM categories WHERE name = ? AND id != ?", args: [row.name, Number(row.keep_id)] });
+      }
+    }
+    try { await c.execute({ sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name ON categories(name)", args: [] }); } catch {}
     for (const [name, name_en] of SEED_CATEGORIES) {
       await c.execute({ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: [name, name_en] });
     }
