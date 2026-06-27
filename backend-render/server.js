@@ -325,23 +325,73 @@ app.get('/api/translate/languages', (req, res) => {
   ]);
 });
 
+// Simple local translation fallback for common words/phrases
+const LOCAL_TRANSLATIONS = {
+    'ta': {
+        'hello': 'வணக்கம்', 'welcome': 'வரவேற்கிறோம்', 'thank you': 'நன்றி',
+        'good': 'நல்ல', 'book': 'புத்தகம்', 'books': 'புத்தகங்கள்',
+        'read': 'படி', 'reading': 'படித்தல்', 'library': 'நூலகம்',
+        'pdf': 'PDF', 'download': 'பதிவிறக்கம்', 'file': 'கோப்பு',
+        'free': 'இலவசம்', 'education': 'கல்வி', 'story': 'கதை',
+        'stories': 'கதைகள்', 'novel': 'நாவல்', 'poetry': 'கவிதை',
+        'poem': 'கவிதை', 'history': 'வரலாறு', 'science': 'அறிவியல்',
+        'children': 'குழந்தைகள்', 'religion': 'சமயம்', 'philosophy': 'தத்துவம்',
+        'short': 'சிறிய', 'tamil': 'தமிழ்', 'english': 'ஆங்கிலம்',
+        'author': 'ஆசிரியர்', 'category': 'வகை', 'search': 'தேடல்',
+        'view': 'பார்வை', 'all': 'அனைத்தும்', 'more': 'மேலும்',
+        'learn': 'கற்றல்', 'study': 'படிப்பு', 'knowledge': 'அறிவு',
+    }
+};
+
+function localTranslate(text, targetLang) {
+    if (targetLang !== 'ta') return null;
+    const lower = text.toLowerCase().trim();
+    if (LOCAL_TRANSLATIONS.ta[lower]) return LOCAL_TRANSLATIONS.ta[lower];
+    // Try prefix matching
+    for (const [en, ta] of Object.entries(LOCAL_TRANSLATIONS.ta)) {
+        if (lower.startsWith(en) || lower.includes(en)) {
+            return text.replace(new RegExp(en, 'gi'), ta);
+        }
+    }
+    return null;
+}
+
 app.post('/api/translate/text', auth, [
   body('text').trim().isLength({ min: 1, max: 5000 }),
   body('source_language').optional().isLength({ min: 2, max: 10 }),
   body('target_language').optional().isLength({ min: 2, max: 10 }),
 ], validate, async (req, res) => {
   const { text, source_language, target_language } = req.body;
+  const tl = target_language || 'en';
   let translated;
+  let method = 'none';
+  // Try MyMemory API
   try {
-    const r = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${source_language || 'auto'}|${target_language || 'en'}`);
+    const r = await fetch(
+      'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text.slice(0, 500)) +
+      '&langpair=' + (source_language || 'auto') + '|' + tl +
+      '&de=simonpetercys@gmail.com',
+      { signal: AbortSignal.timeout(5000) }
+    );
     const j = await r.json();
-    translated = j.responseData?.translatedText || `[${target_language?.toUpperCase()}] ${text}`;
-  } catch {
-    translated = `[${target_language?.toUpperCase()}] ${text}`;
+    if (j.responseData && j.responseData.translatedText && j.responseData.translatedText !== text) {
+      translated = j.responseData.translatedText;
+      method = 'mymemory';
+    }
+  } catch {}
+  // Try local translation as fallback
+  if (!translated) {
+    const local = localTranslate(text, tl);
+    if (local) { translated = local; method = 'local'; }
+  }
+  // Final fallback
+  if (!translated) {
+    translated = '[' + tl.toUpperCase() + '] ' + text;
+    method = 'fallback';
   }
   await insert('INSERT INTO translate_history (user_id, source_text, translated_text, source_language, target_language) VALUES (?, ?, ?, ?, ?)',
-    [req.user.id, text, translated, source_language, target_language]);
-  res.json({ translated_text: translated, source_language, target_language });
+    [req.user.id, text, translated, source_language, tl]);
+  res.json({ translated_text: translated, source_language, target_language: tl, method });
 });
 
 app.post('/api/translate/detect', (req, res) => {
@@ -370,16 +420,39 @@ app.post('/api/summarize', auth, [
   body('translate_to').optional().isLength({ min: 2, max: 10 }),
 ], validate, async (req, res) => {
   const { text, translate_to } = req.body;
-  const summary = 'This is a concise AI-generated summary of the provided text.';
-  const translatedSummary = translate_to ? 'இது வழங்கப்பட்ட உரையின் சுருக்கமான சுருக்கம்.' : null;
+  // Simple extractive summary: pick first few meaningful sentences
+  let summary = '';
+  const sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 10);
+  if (sentences.length <= 3) {
+    summary = text.slice(0, 300) + (text.length > 300 ? '...' : '');
+  } else {
+    const take = Math.min(3, Math.max(1, Math.ceil(sentences.length / 3)));
+    // Pick first, middle, and last meaningful sentences for coverage
+    const indices = [0, Math.floor(sentences.length / 2), sentences.length - 1].slice(0, take);
+    summary = indices.map(i => sentences[i]).join('. ') + '.';
+  }
+  const compressionRatio = text.length > 0 ? Math.round((1 - summary.length / text.length) * 100) : 0;
+  let translatedSummary = null;
+  if (translate_to) {
+    try {
+      const r = await fetch(
+        'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(summary.slice(0, 500)) +
+        '&langpair=en|' + translate_to + '&de=simonpetercys@gmail.com',
+        { signal: AbortSignal.timeout(5000) }
+      );
+      const j = await r.json();
+      if (j.responseData && j.responseData.translatedText) translatedSummary = j.responseData.translatedText;
+    } catch {}
+    if (!translatedSummary) translatedSummary = '[' + translate_to.toUpperCase() + '] ' + summary;
+  }
   await insert('INSERT INTO summarize_history (user_id, source_text, summary, compression_ratio) VALUES (?, ?, ?, ?)',
-    [req.user.id, text, summary, 35]);
+    [req.user.id, text, summary, compressionRatio]);
   res.json({
     original_summary: summary,
     translated_summary: translatedSummary,
     translated_language: translate_to || null,
-    compression_ratio: 35,
-    sentence_count: text ? text.split(/[.!?]+/).length : 0,
+    compression_ratio: compressionRatio,
+    sentence_count: sentences.length,
   });
 });
 
@@ -449,25 +522,61 @@ app.put('/api/flashcards/cards/:id/progress', auth, [
 app.post('/api/ocr/translate', auth, uploadLimiter, upload.single('image'), async (req, res) => {
   if (!req.file) return res.status(400).json({ detail: 'No image uploaded' });
   try {
-    const { data } = await getTesseract().recognize(req.file.path, 'tam+eng', { logger: () => {} });
-    const extracted = (data.text || '').trim();
-    const translated = extracted ? `[EN] ${extracted}` : 'No text detected in the image.';
+    const fs = require('fs');
+    const imagePath = req.file.path;
+    if (!fs.existsSync(imagePath)) return res.status(400).json({ detail: 'Image file not found' });
+    let extracted = '';
+    let confidence = 0;
+    try {
+      const { data } = await getTesseract().recognize(imagePath, 'tam+eng', { logger: () => {} });
+      extracted = (data.text || '').trim();
+      confidence = data.confidence || 0;
+    } catch (ocrErr) {
+      extracted = '';
+    }
+    try { fs.unlinkSync(imagePath); } catch {}
+    if (!extracted) {
+      return res.json({ extracted_text: '', translated_text: '', confidence: 0, note: 'No text detected' });
+    }
+    const translated = await (async () => {
+      try {
+        const r = await fetch(
+          'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(extracted.slice(0, 500)) +
+          '&langpair=ta|en&de=simonpetercys@gmail.com',
+          { signal: AbortSignal.timeout(5000) }
+        );
+        const j = await r.json();
+        if (j.responseData && j.responseData.translatedText) return j.responseData.translatedText;
+      } catch {}
+      return '[EN] ' + extracted;
+    })();
     await insert('INSERT INTO ocr_history (user_id, extracted_text, translated_text) VALUES (?, ?, ?)',
       [req.user.id, extracted, translated]);
-    res.json({ extracted_text: extracted, translated_text: translated, confidence: data.confidence || 0 });
+    res.json({ extracted_text: extracted, translated_text: translated, confidence });
   } catch (err) {
-    res.status(500).json({ detail: 'OCR processing failed' });
+    res.status(500).json({ detail: 'OCR processing failed: ' + err.message });
   }
 });
 
 // --- Audio transcription ---
 app.post('/api/audio/transcribe', auth, uploadLimiter, upload.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ detail: 'No audio uploaded' });
-  const transcribed = 'Sample transcribed text from audio. இது ஒரு மாதிரி ஒலி பெயர்ப்பு.';
-  const translated = 'This is the translated version of the audio content.';
-  await insert('INSERT INTO audio_history (user_id, transcribed_text, translated_text) VALUES (?, ?, ?)',
-    [req.user.id, transcribed, translated]);
-  res.json({ transcribed_text: transcribed, translated_text: translated });
+  const fs = require('fs');
+  const audioPath = req.file.path;
+  try {
+    // Audio transcription requires external API (Google/Azure/Whisper).
+    // For now, return a placeholder with the filename info.
+    const fileName = req.file.originalname || 'audio';
+    const transcribed = '[Audio file: ' + fileName + '] Transcription requires a speech-to-text API key.';
+    const translated = transcribed;
+    await insert('INSERT INTO audio_history (user_id, transcribed_text, translated_text) VALUES (?, ?, ?)',
+      [req.user.id, transcribed, translated]);
+    res.json({ transcribed_text: transcribed, translated_text: translated, note: 'placeholder' });
+  } catch (err) {
+    res.status(500).json({ detail: 'Audio processing failed: ' + err.message });
+  } finally {
+    try { fs.unlinkSync(audioPath); } catch {}
+  }
 });
 
 // --- Bookmarks ---
@@ -657,6 +766,20 @@ app.post('/api/admin/scrape-book', auth, adminOnly, async (req, res) => {
   }
 });
 
+// --- Category Tamil name mapping ---
+const CATEGORY_TAMIL = {
+    'Tamil Literature': 'தமிழ் இலக்கியம்',
+    'Children': 'குழந்தைகள்',
+    'Education': 'கல்வி',
+    'History': 'வரலாறு',
+    'Science': 'அறிவியல்',
+    'Philosophy': 'தத்துவம்',
+    'Religion': 'சமயம்',
+    'Poetry': 'கவிதை',
+    'Novel': 'நாவல்',
+    'Short Story': 'சிறுகதை',
+};
+
 // --- tamilbookspdf.com scraper ---
 const TBPS_GENRE_MAP = {
     'Novels': 'Novel', 'Short Stories': 'Short Story', 'Historical': 'History',
@@ -681,6 +804,17 @@ const TBPS_KNOWN_AUTHORS = new Set([
     'Viji Vignesh', 'Yaddanapudi Sulochana Rani', 'Muthulakshmi Raghavan Novels',
     'Periyar', 'Sujatha',
 ]);
+
+async function getTbpsCategoryId(mapped) {
+    const catRow = await queryOne('SELECT id FROM categories WHERE name_en = ?', [mapped]);
+    if (catRow) return Number(catRow.id);
+    const tamilName = CATEGORY_TAMIL[mapped] || mapped;
+    const ins = await insert(
+        "INSERT INTO categories (name, name_en, description, book_count) VALUES (?,?,?,0)",
+        [tamilName, mapped, '']
+    );
+    return Number(ins);
+}
 
 app.post('/api/admin/tbps/scrape-page', auth, adminOnly, async (req, res) => {
     try {
@@ -723,24 +857,69 @@ app.post('/api/admin/tbps/scrape-page', auth, adminOnly, async (req, res) => {
                     }
                 });
                 const mapped = TBPS_GENRE_MAP[genre] || 'Tamil Literature';
-                let catId = null;
-                const catRow = await queryOne('SELECT id FROM categories WHERE name_en = ?', [mapped]);
-                if (catRow) { catId = Number(catRow.id); } else {
-                    const ins = await insert("INSERT INTO categories (name, name_en, description, book_count) VALUES (?,?,?,0)", [mapped, mapped, '']);
-                    catId = Number(ins);
-                }
+                const catId = await getTbpsCategoryId(mapped);
                 const slug = link.href.replace('https://tamilbookspdf.com/books/', '').replace(/\/$/, '');
                 const titleEn = slug.replace(/[^a-zA-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim() || title;
                 await insert(
                     "INSERT INTO books (title, title_ta, author, language, description, file_type, file_url, cover_url, category_id, uploaded_by, status) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     [titleEn, title, author, 'ta', metaDesc, 'pdf', pdfUrl, ogImage, catId, 1, 'approved']
                 );
+                await run('UPDATE categories SET book_count = (SELECT COUNT(*) FROM books WHERE category_id = ?) WHERE id = ?', [catId, catId]);
                 results.imported++;
             } catch (e) {
                 results.errors.push(link.href + ': ' + e.message);
             }
         }
         res.json(results);
+    } catch (e) {
+        res.status(500).json({ detail: e.message });
+    }
+});
+
+// --- DB cleanup & fix endpoint ---
+app.post('/api/admin/db/cleanup', auth, adminOnly, async (req, res) => {
+    try {
+        const report = [];
+        // 1. Fix categories that have English name instead of Tamil
+        for (const [en, ta] of Object.entries(CATEGORY_TAMIL)) {
+            const bad = await query('SELECT id, name FROM categories WHERE name_en = ? AND name != ?', [en, ta]);
+            for (const row of bad) {
+                await run('UPDATE categories SET name = ?, book_count = 0 WHERE id = ?', [ta, Number(row.id)]);
+                report.push('Fixed category name: ' + row.name + ' -> ' + ta);
+            }
+        }
+        // 2. Recalculate book_count for all categories
+        const cats = await query('SELECT id FROM categories');
+        for (const cat of cats) {
+            const c = await queryOne('SELECT COUNT(*) as cnt FROM books WHERE category_id = ?', [Number(cat.id)]);
+            await run('UPDATE categories SET book_count = ? WHERE id = ?', [c ? c.cnt : 0, Number(cat.id)]);
+        }
+        report.push('Updated book_count for ' + cats.length + ' categories');
+        // 3. Fix books with null category_id - assign them
+        const nullBooks = await query('SELECT id, title, file_url FROM books WHERE category_id IS NULL');
+        if (nullBooks.length > 0) {
+            const tlCat = await queryOne('SELECT id FROM categories WHERE name_en = ?', ['Tamil Literature']);
+            if (tlCat) {
+                await run('UPDATE books SET category_id = ? WHERE category_id IS NULL', [Number(tlCat.id)]);
+                await run('UPDATE categories SET book_count = (SELECT COUNT(*) FROM books WHERE category_id = ?) WHERE id = ?', [Number(tlCat.id), Number(tlCat.id)]);
+            }
+            report.push('Fixed ' + nullBooks.length + ' books with null category_id');
+        }
+        // 4. Remove duplicate categories (same name_en)
+        const dupes = await query("SELECT name_en, COUNT(*) as cnt, MIN(id) as keep_id FROM categories GROUP BY name_en HAVING cnt > 1");
+        for (const d of dupes) {
+            const rows = await query('SELECT id FROM categories WHERE name_en = ? AND id != ?', [d.name_en, Number(d.keep_id)]);
+            for (const row of rows) {
+                await run('UPDATE books SET category_id = ? WHERE category_id = ?', [Number(d.keep_id), Number(row.id)]);
+                await run('DELETE FROM categories WHERE id = ?', [Number(row.id)]);
+            }
+            await run('UPDATE categories SET book_count = (SELECT COUNT(*) FROM books WHERE category_id = ?) WHERE id = ?', [Number(d.keep_id), Number(d.keep_id)]);
+            report.push('Merged ' + (rows.length) + ' duplicate categories for ' + d.name_en);
+        }
+        // 5. Update source field for tbps books
+        await run("UPDATE books SET source = 'tamilbookspdf' WHERE file_url LIKE 'https://tamilbookspdf.com/books/%' AND (source IS NULL OR source = '')");
+        report.push('Updated source for tamilbookspdf books');
+        res.json({ done: true, report });
     } catch (e) {
         res.status(500).json({ detail: e.message });
     }

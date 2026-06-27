@@ -1,33 +1,22 @@
-// Test Turso HTTP API directly
+const { createClient } = require('@libsql/client/http');
+
 async function main() {
-  const url = process.env.TURSO_DB_URL; // libsql://etamil-books-anesh2302.aws-ap-south-1.turso.io
+  const url = process.env.TURSO_DB_URL;
   const token = process.env.TURSO_DB_TOKEN;
   
   console.log('URL:', url);
   console.log('Token length:', token ? token.length : 0);
+  console.log('Token starts with:', token ? token.slice(0, 20) + '...' : 'NONE');
   
-  // Convert libsql:// to https:// for direct REST API
-  const restUrl = url.replace('libsql://', 'https://');
-  console.log('REST URL:', restUrl);
+  const turso = createClient({ url, authToken: token });
   
   try {
-    const res = await fetch(restUrl + '/v2/pipeline', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + token,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        requests: [
-          { type: 'execute', stmt: { sql: 'SELECT COUNT(*) as c FROM books' } }
-        ]
-      })
-    });
-    const body = await res.text();
-    console.log('Status:', res.status);
-    console.log('Response:', body.slice(0, 500));
-  } catch (e) {
-    console.error('Error:', e.message);
+    const r = await turso.execute('SELECT COUNT(*) as cnt FROM books');
+    console.log('Books count:', r.rows[0].cnt);
+  } catch (err) {
+    console.error('Error:', err.message);
+    console.error('Full error:', JSON.stringify(err, null, 2));
   }
 }
+
 main();
