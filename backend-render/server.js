@@ -394,7 +394,7 @@ app.post('/api/translate/text', auth, [
       method = 'fallback';
     }
     await insert('INSERT INTO translate_history (user_id, source_text, translated_text, source_language, target_language) VALUES (?, ?, ?, ?, ?)',
-      [req.user.id, text, translated, source_language, tl]);
+      [req.user.id, text, translated, source_language || '', tl]);
     res.json({ translated_text: translated, source_language, target_language: tl, method });
   } catch (e) {
     res.status(500).json({ detail: 'Translation failed: ' + e.message });
