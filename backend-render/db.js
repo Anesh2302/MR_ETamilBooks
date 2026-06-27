@@ -91,12 +91,16 @@ const initDB = async () => {
     for (const sql of SCHEMA) {
       await c.execute({ sql, args: [] });
     }
+    await c.execute({ sql: "DELETE FROM categories", args: [] });
     for (const [name, name_en] of SEED_CATEGORIES) {
-      await c.execute({ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: [name, name_en] });
+      await c.execute({ sql: "INSERT INTO categories (name, name_en) VALUES (?, ?)", args: [name, name_en] });
     }
     const bcrypt = require('bcryptjs');
     const adminPw = bcrypt.hashSync('REMOVED', 10);
-    await c.execute({ sql: "INSERT OR IGNORE INTO users (username, email, password, full_name, preferred_language, is_superuser, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)", args: ['simon', 'simonpetercys@gmail.com', adminPw, 'Simon', 'ta', 1, 1] });
+    const existing = await c.execute({ sql: "SELECT id FROM users WHERE username = ?", args: ['simon'] });
+    if (!existing.rows || existing.rows.length === 0) {
+      await c.execute({ sql: "INSERT INTO users (username, email, password, full_name, preferred_language, is_superuser, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)", args: ['simon', 'simonpetercys@gmail.com', adminPw, 'Simon', 'ta', 1, 1] });
+    }
     await c.execute({ sql: "INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)", args: ['admin', '["all"]'] });
     initialized = true;
     if (process.env.VERCEL) console.log('initDB done, t=' + (Date.now()-t0));
@@ -113,5 +117,5 @@ const ensureInit = async () => {
   await Promise.race([initPromise, new Promise(r => setTimeout(r, 10000))]);
 };
 
-console.log('db.js v14 seed data');
+console.log('db.js v15 dedup');
 module.exports = { initDB, query, queryOne, run, insert };
