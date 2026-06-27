@@ -91,9 +91,9 @@ const initDB = async () => {
     for (const sql of SCHEMA) {
       await c.execute({ sql, args: [] });
     }
-    await c.execute({ sql: "DELETE FROM categories", args: [] });
+    try { await c.execute({ sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name ON categories(name)", args: [] }); } catch {}
     for (const [name, name_en] of SEED_CATEGORIES) {
-      await c.execute({ sql: "INSERT INTO categories (name, name_en) VALUES (?, ?)", args: [name, name_en] });
+      await c.execute({ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: [name, name_en] });
     }
     const bcrypt = require('bcryptjs');
     const adminPw = bcrypt.hashSync('REMOVED', 10);
@@ -102,6 +102,17 @@ const initDB = async () => {
       await c.execute({ sql: "INSERT INTO users (username, email, password, full_name, preferred_language, is_superuser, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)", args: ['simon', 'simonpetercys@gmail.com', adminPw, 'Simon', 'ta', 1, 1] });
     }
     await c.execute({ sql: "INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)", args: ['admin', '["all"]'] });
+    const bookCount = await c.execute({ sql: "SELECT COUNT(*) as cnt FROM books", args: [] });
+    if (!bookCount.rows || bookCount.rows[0].cnt === 0) {
+      const sampleBooks = [
+        ['திருக்குறள்', 'Thirukkural', 'திருவள்ளுவர்', 'Thiruvalluvar', 'ta', 'திருக்குறள் அல்லது திருவள்ளுவர் அறநூல்', 'Ancient Tamil ethical text with 1330 couplets', 'pdf', 1],
+        ['பாரதியார் கவிதைகள்', 'Bharathiyar Poems', 'மகாகவி பாரதியார்', 'Mahakavi Bharathiyar', 'ta', 'மகாகவி சுப்பிரமணிய பாரதியின் தேர்ந்தெடுக்கப்பட்ட கவிதைகள்', 'Selected poems of the great Tamil poet', 'pdf', 9],
+        ['The Alchemist', 'The Alchemist', 'Paulo Coelho', 'Paulo Coelho', 'en', 'A mystical story about following your dreams', 'A mystical story about following your dreams', 'pdf', 5],
+      ];
+      for (const [title, title_en, author, author_en, lang, desc, desc_en, file_type, cat_id] of sampleBooks) {
+        await c.execute({ sql: "INSERT INTO books (title, title_ta, author, author_ta, language, description, description_ta, file_type, category_id, uploaded_by, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", args: [title_en, title, author_en, author, lang, desc_en, desc, file_type, cat_id, 1, 'approved'] });
+      }
+    }
     initialized = true;
     if (process.env.VERCEL) console.log('initDB done, t=' + (Date.now()-t0));
   } catch (e) {
@@ -117,5 +128,5 @@ const ensureInit = async () => {
   await Promise.race([initPromise, new Promise(r => setTimeout(r, 10000))]);
 };
 
-console.log('db.js v15 dedup');
+console.log('db.js v16 books');
 module.exports = { initDB, query, queryOne, run, insert };

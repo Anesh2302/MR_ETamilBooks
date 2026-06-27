@@ -326,7 +326,18 @@ app.post('/api/translate/text', auth, [
   body('target_language').optional().isLength({ min: 2, max: 10 }),
 ], validate, async (req, res) => {
   const { text, source_language, target_language } = req.body;
-  const translated = `[${target_language?.toUpperCase()}] ${text}`;
+  let translated;
+  try {
+    const r = await fetch('https://libretranslate.com/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: text, source: source_language || 'auto', target: target_language || 'en' }),
+    });
+    const j = await r.json();
+    translated = j.translatedText || `[${target_language?.toUpperCase()}] ${text}`;
+  } catch {
+    translated = `[${target_language?.toUpperCase()}] ${text}`;
+  }
   await insert('INSERT INTO translate_history (user_id, source_text, translated_text, source_language, target_language) VALUES (?, ?, ?, ?, ?)',
     [req.user.id, text, translated, source_language, target_language]);
   res.json({ translated_text: translated, source_language, target_language });
