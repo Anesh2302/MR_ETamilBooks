@@ -148,5 +148,5 @@ const insert = async (sql, params = []) => {
   }
 };
 
-console.log('db.js v8 fetch');
+console.log('db.js v9 begin+commit');
 module.exports = { initDB, query, queryOne, run, insert };
