@@ -17,6 +17,7 @@ export default function Translate() {
   const [activeTab, setActiveTab] = useState<'text' | 'document'>('text');
   const [docFile, setDocFile] = useState<File | null>(null);
   const [docTranslating, setDocTranslating] = useState(false);
+  const [docResult, setDocResult] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -56,13 +57,15 @@ export default function Translate() {
   const handleDocTranslate = async () => {
     if (!docFile) return;
     setDocTranslating(true);
+    setDocResult(null);
     const formData = new FormData();
     formData.append('file', docFile);
     formData.append('source_language', sourceLang);
     formData.append('target_language', targetLang);
     try {
-      await translateDocument(formData);
-      toast.success('Document translation started! Check history.');
+      const res = await translateDocument(formData);
+      setDocResult(res.data.translated_text);
+      toast.success('Document translated successfully');
       setDocFile(null);
       if (fileRef.current) fileRef.current.value = '';
     } catch (err) {
@@ -111,7 +114,7 @@ export default function Translate() {
               </div>
             </div>
             <div>
-              <div className="input-field h-48 resize-none overflow-y-auto bg-white/5">
+              <div className="input-field h-48 resize-none overflow-y-auto">
                 {loading ? <div className="animate-pulse text-gray-400">Translating...</div> : translatedText || <span className="text-gray-400">Translation will appear here</span>}
               </div>
               {translatedText && (
@@ -145,28 +148,38 @@ export default function Translate() {
         </div>
       ) : (
         <div className="card">
-          <div className="text-center py-8">
-            <FiFileText size={48} className="mx-auto text-gray-300 mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">Upload Document for Translation</h2>
-            <p className="text-gray-400 mb-6">Supports PDF, DOC, DOCX, TXT, RTF, ODT, PPTX</p>
-            <div className="flex items-center justify-center space-x-4">
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".pdf,.doc,.docx,.txt,.rtf,.odt,.pptx"
-                onChange={(e) => setDocFile(e.target.files?.[0] || null)}
-                className="hidden"
-                id="doc-upload"
-              />
-              <label htmlFor="doc-upload" className="btn-secondary cursor-pointer flex items-center">
-                <FiUpload className="mr-2" /> Choose File
-              </label>
-              <button onClick={handleDocTranslate} className="btn-primary" disabled={!docFile || docTranslating}>
-                {docTranslating ? 'Translating...' : 'Translate Document'}
-              </button>
+          <div className="py-8">
+            <div className="text-center">
+              <FiFileText size={48} className="mx-auto text-gray-300 mb-4" />
+              <h2 className="text-xl font-semibold text-white mb-2">Upload Document for Translation</h2>
+              <p className="text-gray-400 mb-6">Supports PDF, DOCX, TXT</p>
+              <div className="flex items-center justify-center space-x-4">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".pdf,.docx,.txt"
+                  onChange={(e) => setDocFile(e.target.files?.[0] || null)}
+                  className="hidden"
+                  id="doc-upload"
+                />
+                <label htmlFor="doc-upload" className="btn-secondary cursor-pointer flex items-center">
+                  <FiUpload className="mr-2" /> Choose File
+                </label>
+                <button onClick={handleDocTranslate} className="btn-primary" disabled={!docFile || docTranslating}>
+                  {docTranslating ? 'Translating...' : 'Translate Document'}
+                </button>
+              </div>
+              {docFile && (
+                <p className="mt-4 text-sm text-gray-300">Selected: {docFile.name} ({(docFile.size / 1024).toFixed(1)} KB)</p>
+              )}
             </div>
-            {docFile && (
-              <p className="mt-4 text-sm text-gray-300">Selected: {docFile.name} ({(docFile.size / 1024).toFixed(1)} KB)</p>
+            {docResult && (
+              <div className="mt-6">
+                <h3 className="text-sm font-medium text-gray-400 mb-2">Translated Text</h3>
+                <div className="input-field h-64 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                  {docResult}
+                </div>
+              </div>
             )}
           </div>
         </div>

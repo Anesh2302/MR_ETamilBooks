@@ -20,7 +20,7 @@ export default function Register() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
+      <div className="min-h-screen flex items-center justify-center bg-[#000000]">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-tamil-500" />
       </div>
     );
@@ -57,16 +57,8 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f] px-4 relative overflow-hidden">
-      <div className="bg-orbs">
-        <div className="orb animate-orb" />
-        <div className="orb animate-orb" />
-        <div className="orb animate-orb" />
-        <div className="orb animate-orb" />
-        <div className="orb animate-orb" />
-      </div>
-
-      <div className="w-full max-w-sm relative z-10 animate-fade-in-up">
+    <div className="min-h-screen flex items-center justify-center bg-[#000000] px-4">
+      <div className="w-full max-w-sm animate-fade-in-up">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-tamil-500 to-orange-500 shadow-lg shadow-tamil-500/25 mb-4">
             <FiBook size={24} className="text-white" />

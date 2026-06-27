@@ -20,13 +20,13 @@ const footerLinks = [
 
 export default function Footer() {
   return (
-    <footer className="bg-gray-900 text-gray-400 mt-16">
+    <footer className="mt-16" style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="md:col-span-2">
             <div className="flex items-center gap-2 mb-3">
               <span className="text-2xl">📚</span>
-              <span className="font-bold text-lg text-white">E-Book Translator</span>
+              <span className="font-bold text-lg" style={{ color: 'var(--text-primary)' }}>E-Book Translator</span>
             </div>
             <p className="text-sm max-w-md">
               Your complete platform for Tamil & English books, document translation, text translation, and more.
@@ -35,7 +35,7 @@ export default function Footer() {
           </div>
           {footerLinks.map((section) => (
             <div key={section.title}>
-              <h4 className="font-semibold text-white text-sm mb-3">{section.title}</h4>
+              <h4 className="font-semibold text-sm mb-3" style={{ color: 'var(--text-primary)' }}>{section.title}</h4>
               <ul className="space-y-2">
                 {section.links.map((link) => (
                   <li key={link.label}>

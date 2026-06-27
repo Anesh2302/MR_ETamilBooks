@@ -83,10 +83,10 @@ const UPLOAD_DIR = path.join(__dirname, 'uploads');
 try { if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch (e) { /* read-only fs on Vercel */ }
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-const ALLOWED_DOC_TYPES = ['application/pdf', 'application/epub+zip'];
+const ALLOWED_DOC_TYPES = ['application/pdf', 'application/epub+zip', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'];
 const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/webm'];
 const ALLOWED_IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-const ALLOWED_DOC_EXT = ['.pdf', '.epub'];
+const ALLOWED_DOC_EXT = ['.pdf', '.epub', '.txt', '.docx', '.doc'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 function fileFilter(req, file, cb) {
@@ -107,6 +107,15 @@ function fileFilter(req, file, cb) {
 const upload = isVercel
   ? multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_SIZE }, fileFilter })
   : multer({ dest: UPLOAD_DIR, limits: { fileSize: MAX_FILE_SIZE }, fileFilter });
+
+function handleMulterError(err, req, res, next) {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ detail: 'File too large. Max 10MB.' });
+    return res.status(400).json({ detail: err.message });
+  }
+  if (err) return res.status(400).json({ detail: err.message });
+  next();
+}
 
 // --- Input validation helpers ---
 const validate = (req, res, next) => {
@@ -218,6 +227,8 @@ app.get('/api/books', [
   queryValidator('category_id').optional().isInt(),
   queryValidator('language').optional().isLength({ min: 2, max: 10 }),
   queryValidator('search').optional().isLength({ max: 200 }),
+  queryValidator('page').optional().isInt({ min: 1 }),
+  queryValidator('per_page').optional().isInt({ min: 1, max: 100 }),
 ], validate, async (req, res) => {
   let sql = 'SELECT * FROM books WHERE status = ?';
   const params = ['approved'];
@@ -229,7 +240,19 @@ app.get('/api/books', [
     params.push(q, q, q, q);
   }
   sql += ' ORDER BY created_at DESC';
-  res.json(await query(sql, params));
+  // If no pagination params, return old flat array for backward compat
+  if (req.query.page === undefined && req.query.per_page === undefined) {
+    return res.json(await query(sql, params));
+  }
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const perPage = Math.min(100, Math.max(1, Number(req.query.per_page) || 20));
+  const offset = (page - 1) * perPage;
+  const countResult = await queryOne(`SELECT COUNT(*) as total FROM (${sql})`, params);
+  const total = countResult ? countResult.total : 0;
+  sql += ` LIMIT ? OFFSET ?`;
+  params.push(perPage, offset);
+  const data = await query(sql, params);
+  res.json({ data, total, page, per_page: perPage, total_pages: Math.ceil(total / perPage) });
 });
 
 app.get('/api/books/:id', [
@@ -299,12 +322,17 @@ app.get('/api/books/:id/download', [
   const book = await queryOne('SELECT * FROM books WHERE id = ?', [Number(req.params.id)]);
   if (!book) return res.status(404).json({ detail: 'Book not found' });
   await run('UPDATE books SET downloads_count = downloads_count + 1 WHERE id = ?', [Number(req.params.id)]);
-  if (book.file_url && fs.existsSync(path.join(__dirname, book.file_url))) {
-    res.download(path.join(__dirname, book.file_url));
-  } else {
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.send(book.content_text || book.description || 'Content not available');
+  if (book.file_url) {
+    if (book.file_url.startsWith('http://') || book.file_url.startsWith('https://')) {
+      return res.redirect(book.file_url);
+    }
+    const localPath = path.join(__dirname, book.file_url);
+    if (fs.existsSync(localPath)) {
+      return res.download(localPath);
+    }
   }
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.send(book.content_text || book.description || 'Content not available');
 });
 
 // --- Translate ---
@@ -441,6 +469,66 @@ app.post('/api/translate/detect', (req, res) => {
 
 app.get('/api/translate/history', auth, async (req, res) => {
   res.json(await query('SELECT * FROM translate_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 50', [req.user.id]));
+});
+
+app.post('/api/translate/document', auth, upload.single('file'), handleMulterError, async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ detail: 'No file uploaded' });
+    const buf = req.file.buffer;
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    let extracted = '';
+    if (ext === '.txt') {
+      extracted = buf.toString('utf-8');
+    } else if (ext === '.pdf') {
+      const pdfParse = require('pdf-parse');
+      const data = await pdfParse(buf);
+      extracted = data.text || '';
+    } else if (ext === '.docx') {
+      const mammoth = require('mammoth');
+      const result = await mammoth.extractRawText({ buffer: buf });
+      extracted = result.value || '';
+    } else if (ext === '.doc') {
+      extracted = buf.toString('utf-8').replace(/[^\x20-\x7E\n\r\t]/g, ' ').replace(/\s+/g, ' ').trim();
+    } else {
+      extracted = buf.toString('utf-8');
+    }
+    extracted = extracted.trim().slice(0, 10000);
+    if (!extracted) return res.status(400).json({ detail: 'Could not extract text from file' });
+    const source_language = req.body.source_language || '';
+    const target_language = req.body.target_language || 'en';
+    const tl = target_language;
+    let translated = null;
+    let method = 'none';
+    const local = localTranslate(extracted.slice(0, 500), tl, source_language);
+    if (local && extracted.length < 500) { translated = local; method = 'local'; }
+    if (!translated) {
+      try {
+        const q = encodeURIComponent(extracted.slice(0, 500));
+        const sl = source_language || (/[\u0B80-\u0BFF]/.test(extracted) ? 'ta' : 'en');
+        const pair = sl + '|' + tl;
+        const url = 'https://api.mymemory.translated.net/get?q=' + q + '&langpair=' + pair + '&de=simonpetercys@gmail.com';
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 6000);
+        const r = await fetch(url, { signal: controller.signal });
+        clearTimeout(tid);
+        const j = await r.json();
+        const myTxt = j.responseData && j.responseData.translatedText;
+        if (myTxt && myTxt !== extracted && !myTxt.includes('INVALID') && !myTxt.includes('PLEASE SELECT')) {
+          translated = myTxt;
+          method = 'mymemory';
+        }
+      } catch { method = 'mymemory_err'; }
+    }
+    if (!translated) {
+      translated = '[' + tl.toUpperCase() + '] ' + extracted;
+      if (!method.startsWith('error:')) method = 'fallback';
+    }
+    await insert('INSERT INTO translate_history (user_id, source_text, translated_text, source_language, target_language) VALUES (?, ?, ?, ?, ?)',
+      [req.user.id, extracted.slice(0, 500), translated.slice(0, 500), source_language || '', tl]);
+    res.json({ translated_text: translated, source_language, target_language: tl, method, extracted_length: extracted.length });
+  } catch (e) {
+    res.status(500).json({ detail: 'Document translation failed: ' + e.message });
+  }
 });
 
 // --- TTS ---
