@@ -14,18 +14,18 @@ const features = [
 ];
 
 const languages = [
-  { code: 'ta', name: 'தமிழ்', english: 'Tamil' },
-  { code: 'en', name: 'English', english: 'English' },
-  { code: 'hi', name: 'हिन्दी', english: 'Hindi' },
-  { code: 'ml', name: 'മലയാളം', english: 'Malayalam' },
-  { code: 'te', name: 'తెలుగు', english: 'Telugu' },
-  { code: 'kn', name: 'ಕನ್ನಡ', english: 'Kannada' },
-  { code: 'bn', name: 'বাংলা', english: 'Bengali' },
-  { code: 'fr', name: 'Français', english: 'French' },
-  { code: 'de', name: 'Deutsch', english: 'German' },
-  { code: 'es', name: 'Español', english: 'Spanish' },
-  { code: 'zh', name: '中文', english: 'Chinese' },
-  { code: 'ja', name: '日本語', english: 'Japanese' },
+  { code: 'ta', name: 'தமிழ்', english: 'Tamil', color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/30' },
+  { code: 'en', name: 'English', english: 'English', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
+  { code: 'hi', name: 'हिन्दी', english: 'Hindi', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' },
+  { code: 'ml', name: 'മലയാളം', english: 'Malayalam', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' },
+  { code: 'te', name: 'తెలుగు', english: 'Telugu', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/30' },
+  { code: 'kn', name: 'ಕನ್ನಡ', english: 'Kannada', color: 'text-pink-400', bg: 'bg-pink-500/10', border: 'border-pink-500/30' },
+  { code: 'bn', name: 'বাংলা', english: 'Bengali', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30' },
+  { code: 'fr', name: 'Français', english: 'French', color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/30' },
+  { code: 'de', name: 'Deutsch', english: 'German', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' },
+  { code: 'es', name: 'Español', english: 'Spanish', color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/30' },
+  { code: 'zh', name: '中文', english: 'Chinese', color: 'text-lime-400', bg: 'bg-lime-500/10', border: 'border-lime-500/30' },
+  { code: 'ja', name: '日本語', english: 'Japanese', color: 'text-violet-400', bg: 'bg-violet-500/10', border: 'border-violet-500/30' },
 ];
 
 export default function Home() {
@@ -75,9 +75,9 @@ export default function Home() {
         <p className="section-subtitle text-center">Translate between Tamil and 12+ languages</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
           {languages.map((lang) => (
-            <div key={lang.code} className="text-center p-3 rounded-xl hover:bg-tamil-500/10 border border-transparent hover:border-tamil-500/30 transition-all duration-150">
-              <p className="text-lg font-semibold text-gray-200">{lang.name}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{lang.english}</p>
+            <div key={lang.code} className={`text-center p-3 rounded-xl ${lang.bg} border ${lang.border} transition-all duration-150 hover:scale-105`}>
+              <p className={`text-lg font-semibold ${lang.color}`}>{lang.name}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{lang.english}</p>
             </div>
           ))}
         </div>
