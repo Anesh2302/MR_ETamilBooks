@@ -5,84 +5,42 @@ if (!TURSO_DB_URL || !TURSO_DB_TOKEN) {
   throw new Error('FATAL: TURSO_DB_URL and TURSO_DB_TOKEN must be set');
 }
 
-const apiUrl = 'https://' + TURSO_DB_URL.replace('libsql://', '') + '/v2/pipeline';
+const apiUrl = 'https://' + TURSO_DB_URL.replace('libsql://', '') + '/v1/execute';
 let initialized = false;
 let initPromise = null;
 
-function toTypedArgs(args) {
-  return (args || []).map(a => {
-    if (a === null || a === undefined) return { type: 'null', value: null };
-    if (typeof a === 'number') return { type: Number.isInteger(a) ? 'integer' : 'real', value: a };
-    return { type: 'text', value: String(a) };
-  });
-}
-
 async function tursoReq(sql, params) {
-  const isWrite = !/^\s*(SELECT|PRAGMA)\b/i.test(sql);
-  const requests = isWrite
-    ? [
-        { type: 'execute', stmt: { sql: 'BEGIN', args: [] } },
-        { type: 'execute', stmt: { sql, args: toTypedArgs(params) } },
-        { type: 'execute', stmt: { sql: 'COMMIT', args: [] } },
-        { type: 'close' },
-      ]
-    : [
-        { type: 'execute', stmt: { sql, args: toTypedArgs(params) } },
-        { type: 'close' },
-      ];
+  const body = { statements: [{ q: sql, params: params || [] }] };
   const resp = await fetch(apiUrl, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${TURSO_DB_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ requests }),
+    headers: { Authorization: `Bearer ${TURSO_DB_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   });
   const parsed = await resp.json();
   if (parsed.error) throw new Error(parsed.error.message || JSON.stringify(parsed.error));
-  if (isWrite && parsed.results && parsed.results.length >= 3) {
-    return { results: [parsed.results[1], parsed.results[parsed.results.length - 1]] };
-  }
   return parsed;
 }
 
-function getResult(resp) {
-  if (!resp || !resp.results) return null;
-  const idx = resp.results.length >= 4 ? 1 : 0;
-  const r = resp.results[idx];
-  if (!r) return null;
-  if (r.type === 'error') throw new Error(r.error ? r.error.message : 'Turso error');
-  if (r.response && r.response.result) return r.response.result;
-  return null;
-}
-
-function parseRows(resp) {
-  const result = getResult(resp);
-  if (!result || !result.cols) return [];
-  const cols = result.cols;
-  const rows = result.rows || [];
-  return rows.map(row => {
+function getRows(resp) {
+  if (!resp || resp.success === false || !resp.results || !resp.results[0]) return [];
+  const r = resp.results[0];
+  if (r.error) throw new Error(r.error.message || JSON.stringify(r.error));
+  if (!r.columns || !r.rows) return [];
+  return r.rows.map(row => {
     const obj = {};
-    cols.forEach((col, i) => {
-      const cell = row[i];
-      if (cell === null || cell === undefined) obj[col.name] = null;
-      else if (col.type === 'integer') obj[col.name] = Number(cell);
-      else if (col.type === 'real') obj[col.name] = Number(cell);
-      else obj[col.name] = String(cell);
-    });
+    r.columns.forEach((colName, i) => { obj[colName] = row[i]; });
     return obj;
   });
 }
 
-function parseRow(resp) {
-  const rows = parseRows(resp);
+function getRow(resp) {
+  const rows = getRows(resp);
   return rows[0] || null;
 }
 
 function getInsertId(resp) {
-  const result = getResult(resp);
-  if (result && result.last_insert_rowid !== null && result.last_insert_rowid !== undefined) {
-    return Number(result.last_insert_rowid);
+  if (resp && resp.results && resp.results[0] && resp.results[0].last_insert_rowid !== null) {
+    return Number(resp.results[0].last_insert_rowid);
   }
   return 0;
 }
@@ -93,6 +51,7 @@ const initDB = async () => {
   try {
     await tursoReq('CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, name_en TEXT DEFAULT \'\', book_count INTEGER DEFAULT 0)');
     await tursoReq("INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", ['TestCat', 'Test EN']);
+    await tursoReq("INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", ['SecondCat', 'Second EN']);
     initialized = true;
     if (process.env.VERCEL) console.log('initDB done, t=' + (Date.now()-t0));
   } catch (e) {
@@ -111,7 +70,7 @@ const ensureInit = async () => {
 const query = async (sql, params = []) => {
   await ensureInit();
   try {
-    return parseRows(await tursoReq(sql, params));
+    return getRows(await tursoReq(sql, params));
   } catch (e) {
     if (e.message && e.message.includes('no such table')) return [];
     throw e;
@@ -121,7 +80,7 @@ const query = async (sql, params = []) => {
 const queryOne = async (sql, params = []) => {
   await ensureInit();
   try {
-    return parseRow(await tursoReq(sql, params));
+    return getRow(await tursoReq(sql, params));
   } catch (e) {
     if (e.message && e.message.includes('no such table')) return null;
     throw e;
@@ -148,5 +107,5 @@ const insert = async (sql, params = []) => {
   }
 };
 
-console.log('db.js v9 begin+commit');
+console.log('db.js v10 v1-exec');
 module.exports = { initDB, query, queryOne, run, insert };
