@@ -1,10 +1,10 @@
+const { createClient } = require('@libsql/client/http');
 let client;
 let initialized = false;
 let initPromise = null;
 
 async function getClient() {
   if (client) return client;
-  const { createClient } = await import('@libsql/client/http');
   client = createClient({
     url: process.env.TURSO_DB_URL,
     authToken: process.env.TURSO_DB_TOKEN,
@@ -55,7 +55,7 @@ const insert = async (sql, params = []) => {
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, full_name TEXT DEFAULT '', preferred_language TEXT DEFAULT 'ta', is_superuser INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime('now')))`,
   `CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, name_en TEXT DEFAULT '', book_count INTEGER DEFAULT 0)`,
-  `CREATE TABLE IF NOT EXISTS books (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, title_ta TEXT DEFAULT '', author TEXT DEFAULT '', author_ta TEXT DEFAULT '', language TEXT DEFAULT 'ta', description TEXT DEFAULT '', description_ta TEXT DEFAULT '', file_type TEXT DEFAULT 'pdf', file_url TEXT DEFAULT '', cover_url TEXT DEFAULT '', category_id INTEGER, uploaded_by INTEGER, status TEXT DEFAULT 'approved', views_count INTEGER DEFAULT 0, downloads_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (category_id) REFERENCES categories(id), FOREIGN KEY (uploaded_by) REFERENCES users(id))`,
+  `CREATE TABLE IF NOT EXISTS books (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, title_ta TEXT DEFAULT '', author TEXT DEFAULT '', author_ta TEXT DEFAULT '', language TEXT DEFAULT 'ta', description TEXT DEFAULT '', description_ta TEXT DEFAULT '', file_type TEXT DEFAULT 'pdf', file_url TEXT DEFAULT '', cover_url TEXT DEFAULT '', content_text TEXT DEFAULT '', category_id INTEGER, uploaded_by INTEGER, status TEXT DEFAULT 'approved', views_count INTEGER DEFAULT 0, downloads_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (category_id) REFERENCES categories(id), FOREIGN KEY (uploaded_by) REFERENCES users(id))`,
   `CREATE TABLE IF NOT EXISTS reading_progress (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, book_id INTEGER NOT NULL, page INTEGER DEFAULT 0, progress REAL DEFAULT 0, updated_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (book_id) REFERENCES books(id))`,
   `CREATE TABLE IF NOT EXISTS bookmarks (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, book_id INTEGER NOT NULL, page INTEGER DEFAULT 0, note TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now')), UNIQUE(user_id, book_id, page), FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (book_id) REFERENCES books(id))`,
   `CREATE TABLE IF NOT EXISTS search_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, query TEXT NOT NULL, filters TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now')), FOREIGN KEY (user_id) REFERENCES users(id))`,
@@ -91,6 +91,7 @@ const initDB = async () => {
     for (const sql of SCHEMA) {
       await c.execute({ sql, args: [] });
     }
+    try { await c.execute({ sql: "ALTER TABLE books ADD COLUMN content_text TEXT DEFAULT ''", args: [] }); } catch {}
     const dupes = await c.execute({ sql: "SELECT name, COUNT(*) as cnt, MIN(id) as keep_id FROM categories GROUP BY name HAVING cnt > 1", args: [] });
     if (dupes.rows && dupes.rows.length > 0) {
       for (const row of dupes.rows) {
@@ -128,7 +129,6 @@ const initDB = async () => {
         for (const [titleTa, titleEn, authorTa, authorEn, lang, descTa, descEn, cid, contentLang, contentText] of sampleBooks) {
           await c.execute({ sql: "INSERT INTO books (title, title_ta, author, author_ta, language, description, description_ta, file_type, category_id, uploaded_by, status, content_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", args: [titleEn, titleTa, authorEn, authorTa, lang, descEn, descTa, 'pdf', cid, 1, 'approved', contentText] });
         }
-      }
       }
     }
     initialized = true;
