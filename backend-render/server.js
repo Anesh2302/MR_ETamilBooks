@@ -22,8 +22,29 @@ const CORS_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:3000').split
 const isVercel = !!process.env.VERCEL;
 
 // --- Body parser ---
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+// Vercel already provides req.body on some runtimes. Only parse if missing.
+app.use((req, res, next) => {
+  if (req.body && Object.keys(req.body).length > 0) return next();
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'DELETE') return next();
+  let data = '';
+  req.on('data', c => data += c);
+  req.on('end', () => {
+    if (data) {
+      try {
+        req.body = JSON.parse(data);
+      } catch {
+        try {
+          const params = new URLSearchParams(data);
+          req.body = Object.fromEntries(params);
+        } catch { req.body = {}; }
+      }
+    } else {
+      req.body = req.body || {};
+    }
+    next();
+  });
+  req.on('error', () => { req.body = {}; next(); });
+});
 
 // --- Security headers ---
 app.use(helmet({
