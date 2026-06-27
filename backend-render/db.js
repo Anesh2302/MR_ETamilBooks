@@ -10,18 +10,10 @@ let initialized = false;
 let initPromise = null;
 
 async function tursoReq(sql, params) {
-  const isWrite = /^\s*(INSERT|UPDATE|DELETE)\b/i.test(sql);
-  const requests = isWrite
-    ? [
-        { type: 'execute', stmt: { sql: 'BEGIN', args: [] } },
-        { type: 'execute', stmt: { sql, args: (params || []).map(a => ({ type: 'text', value: String(a) })) } },
-        { type: 'execute', stmt: { sql: 'COMMIT', args: [] } },
-        { type: 'close' },
-      ]
-    : [
-        { type: 'execute', stmt: { sql, args: (params || []).map(a => ({ type: 'text', value: String(a) })) } },
-        { type: 'close' },
-      ];
+  const requests = [
+    { type: 'execute', stmt: { sql, args: (params || []).map(a => ({ type: 'text', value: String(a) })) } },
+    { type: 'close' },
+  ];
   const resp = await fetch(apiUrl, {
     method: 'POST',
     headers: { Authorization: `Bearer ${TURSO_DB_TOKEN}`, 'Content-Type': 'application/json' },
@@ -29,9 +21,6 @@ async function tursoReq(sql, params) {
   });
   const parsed = await resp.json();
   if (parsed.error) throw new Error(parsed.error.message || JSON.stringify(parsed.error));
-  if (isWrite && parsed.results && parsed.results.length >= 4) {
-    return { results: [parsed.results[1], parsed.results[parsed.results.length - 1]] };
-  }
   return parsed;
 }
 
@@ -130,5 +119,5 @@ const insert = async (sql, params = []) => {
   }
 };
 
-console.log('db.js v11 noclose');
+console.log('db.js v12 simple');
 module.exports = { initDB, query, queryOne, run, insert };
