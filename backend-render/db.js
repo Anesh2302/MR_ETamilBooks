@@ -123,16 +123,14 @@ const initDB = async () => {
     console.log('initDB: books table created');
 
     console.log('initDB: inserting categories');
-    await tursoReq([
-      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['தமிழ் இலக்கியம்', 'Tamil Literature'] },
-      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['கதைகள்', 'Stories'] },
-      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['கவிதை', 'Poetry'] },
-      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['வரலாறு', 'History'] },
-      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['அறிவியல்', 'Science'] },
-      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['கல்வி', 'Education'] },
-      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['English Books', 'English Books'] },
-      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['குழந்தை இலக்கியம்', 'Children Literature'] },
-    ]);
+    await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['தமிழ் இலக்கியம்', 'Tamil Literature'] }]);
+    await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['கதைகள்', 'Stories'] }]);
+    await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['கவிதை', 'Poetry'] }]);
+    await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['வரலாறு', 'History'] }]);
+    await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['அறிவியல்', 'Science'] }]);
+    await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['கல்வி', 'Education'] }]);
+    await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['English Books', 'English Books'] }]);
+    await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['குழந்தை இலக்கியம்', 'Children Literature'] }]);
     console.log('initDB: categories inserted');
 
     initialized = true;
