@@ -4,3 +4,4 @@ etamil.db
 uploads/
 *.log
 .DS_Store
+.vercel

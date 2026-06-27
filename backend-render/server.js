@@ -916,9 +916,6 @@ app.post('/api/admin/db/cleanup', auth, adminOnly, async (req, res) => {
             await run('UPDATE categories SET book_count = (SELECT COUNT(*) FROM books WHERE category_id = ?) WHERE id = ?', [Number(d.keep_id), Number(d.keep_id)]);
             report.push('Merged ' + (rows.length) + ' duplicate categories for ' + d.name_en);
         }
-        // 5. Update source field for tbps books
-        await run("UPDATE books SET source = 'tamilbookspdf' WHERE file_url LIKE 'https://tamilbookspdf.com/books/%' AND (source IS NULL OR source = '')");
-        report.push('Updated source for tamilbookspdf books');
         res.json({ done: true, report });
     } catch (e) {
         res.status(500).json({ detail: e.message });
