@@ -20,12 +20,13 @@ function toTypedArgs(args) {
 }
 
 function tursoReq(sql, params) {
-  const body = JSON.stringify({ stmt: sql, args: (params || []).map(a => a) });
+  const requests = [{ type: 'execute', stmt: { sql, args: toTypedArgs(params) } }, { type: 'close' }];
+  const body = JSON.stringify({ requests });
 
   return new Promise((resolve, reject) => {
     const req = https.request({
       hostname: apiHost,
-      path: '/v1/execute',
+      path: '/v2/pipeline',
       method: 'POST',
       headers: {
         Authorization: `Bearer ${TURSO_DB_TOKEN}`,
@@ -51,14 +52,27 @@ function tursoReq(sql, params) {
   });
 }
 
+function getResult(resp) {
+  if (!resp || !resp.results || !resp.results[0]) return null;
+  const r = resp.results[0];
+  if (r.type === 'error') throw new Error(r.error ? r.error.message : 'Turso error');
+  if (r.response && r.response.result) return r.response.result;
+  return null;
+}
+
 function parseRows(resp) {
-  if (!resp || resp.success === false || !resp.results || !resp.results.columns) return [];
-  const cols = resp.results.columns;
-  const rows = resp.results.rows || [];
+  const result = getResult(resp);
+  if (!result || !result.cols) return [];
+  const cols = result.cols;
+  const rows = result.rows || [];
   return rows.map(row => {
     const obj = {};
-    cols.forEach((colName, i) => {
-      obj[colName] = row[i] === null || row[i] === undefined ? null : row[i];
+    cols.forEach((col, i) => {
+      const cell = row[i];
+      if (cell === null || cell === undefined) obj[col.name] = null;
+      else if (col.type === 'integer') obj[col.name] = Number(cell);
+      else if (col.type === 'real') obj[col.name] = Number(cell);
+      else obj[col.name] = String(cell);
     });
     return obj;
   });
@@ -70,28 +84,71 @@ function parseRow(resp) {
 }
 
 function getInsertId(resp) {
-  if (resp && resp.meta && resp.meta.last_row_id !== null && resp.meta.last_row_id !== undefined) {
-    return Number(resp.meta.last_row_id);
+  const result = getResult(resp);
+  if (result && result.last_insert_rowid !== null && result.last_insert_rowid !== undefined) {
+    return Number(result.last_insert_rowid);
   }
   return 0;
+}
+
+async function tursoBatch(sqls) {
+  const requests = sqls.map(s => ({
+    type: 'execute',
+    stmt: { sql: typeof s === 'string' ? s : s.sql, args: toTypedArgs(typeof s === 'string' ? [] : s.args) },
+  }));
+  requests.unshift({ type: 'execute', stmt: { sql: 'BEGIN', args: [] } });
+  requests.push({ type: 'execute', stmt: { sql: 'COMMIT', args: [] } });
+  requests.push({ type: 'close' });
+  const body = JSON.stringify({ requests });
+
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: apiHost,
+      path: '/v2/pipeline',
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${TURSO_DB_TOKEN}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    }, res => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.error) reject(new Error(parsed.error.message || JSON.stringify(parsed.error)));
+          else resolve(parsed);
+        } catch (e) {
+          reject(new Error('Turso parse error: ' + data.substring(0, 300)));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
 }
 
 const initDB = async () => {
   if (initialized) return;
   const t0 = Date.now();
   try {
-    await tursoReq('CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, full_name TEXT DEFAULT \'\', preferred_language TEXT DEFAULT \'ta\', is_superuser INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime(\'now\')), updated_at TEXT DEFAULT (datetime(\'now\')))');
-    await tursoReq('CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, name_en TEXT DEFAULT \'\', book_count INTEGER DEFAULT 0)');
-    await tursoReq('CREATE TABLE IF NOT EXISTS books (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, title_ta TEXT, author TEXT DEFAULT \'\', author_ta TEXT, description TEXT DEFAULT \'\', description_ta TEXT, language TEXT DEFAULT \'ta\', file_type TEXT DEFAULT \'\', file_size INTEGER DEFAULT 0, file_url TEXT DEFAULT \'\', cover_url TEXT DEFAULT \'\', source TEXT DEFAULT \'user_upload\', category_id INTEGER, status TEXT DEFAULT \'pending\', views_count INTEGER DEFAULT 0, downloads_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime(\'now\')), updated_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (category_id) REFERENCES categories(id))');
-    await tursoReq("INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", ['தமிழ் இலக்கியம்', 'Tamil Literature']);
-    await tursoReq("INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", ['கதைகள்', 'Stories']);
-    await tursoReq("INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", ['கவிதை', 'Poetry']);
-    await tursoReq("INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", ['வரலாறு', 'History']);
-    await tursoReq("INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", ['அறிவியல்', 'Science']);
-    await tursoReq("INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", ['கல்வி', 'Education']);
-    await tursoReq("INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", ['English Books', 'English Books']);
-    await tursoReq("INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", ['குழந்தை இலக்கியம்', 'Children Literature']);
-
+    await tursoBatch([
+      'CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, full_name TEXT DEFAULT \'\', preferred_language TEXT DEFAULT \'ta\', is_superuser INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime(\'now\')), updated_at TEXT DEFAULT (datetime(\'now\'))',
+      'CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, name_en TEXT DEFAULT \'\', book_count INTEGER DEFAULT 0)',
+      'CREATE TABLE IF NOT EXISTS books (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, title_ta TEXT, author TEXT DEFAULT \'\', author_ta TEXT, description TEXT DEFAULT \'\', description_ta TEXT, language TEXT DEFAULT \'ta\', file_type TEXT DEFAULT \'\', file_size INTEGER DEFAULT 0, file_url TEXT DEFAULT \'\', cover_url TEXT DEFAULT \'\', source TEXT DEFAULT \'user_upload\', category_id INTEGER, status TEXT DEFAULT \'pending\', views_count INTEGER DEFAULT 0, downloads_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime(\'now\')), updated_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (category_id) REFERENCES categories(id))',
+    ]);
+    await tursoBatch([
+      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['தமிழ் இலக்கியம்', 'Tamil Literature'] },
+      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['கதைகள்', 'Stories'] },
+      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['கவிதை', 'Poetry'] },
+      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['வரலாறு', 'History'] },
+      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['அறிவியல்', 'Science'] },
+      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['கல்வி', 'Education'] },
+      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['English Books', 'English Books'] },
+      { sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['குழந்தை இலக்கியம்', 'Children Literature'] },
+    ]);
     initialized = true;
     if (process.env.VERCEL) console.log('initDB done, t=' + (Date.now()-t0));
   } catch (e) {
@@ -147,5 +204,5 @@ const insert = async (sql, params = []) => {
   }
 };
 
-console.log('db.js v6 v1-api');
+console.log('db.js v7 batch');
 module.exports = { initDB, query, queryOne, run, insert };
