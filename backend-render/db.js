@@ -18,11 +18,18 @@ function toTypedArgs(args) {
 }
 
 async function tursoReq(sql, params) {
-  const requests = [
-    { type: 'execute', stmt: { sql, args: toTypedArgs(params) } },
-    { type: 'execute', stmt: { sql: 'COMMIT', args: [] } },
-    { type: 'close' },
-  ];
+  const isWrite = !/^\s*(SELECT|PRAGMA)\b/i.test(sql);
+  const requests = isWrite
+    ? [
+        { type: 'execute', stmt: { sql: 'BEGIN', args: [] } },
+        { type: 'execute', stmt: { sql, args: toTypedArgs(params) } },
+        { type: 'execute', stmt: { sql: 'COMMIT', args: [] } },
+        { type: 'close' },
+      ]
+    : [
+        { type: 'execute', stmt: { sql, args: toTypedArgs(params) } },
+        { type: 'close' },
+      ];
   const resp = await fetch(apiUrl, {
     method: 'POST',
     headers: {
@@ -33,12 +40,17 @@ async function tursoReq(sql, params) {
   });
   const parsed = await resp.json();
   if (parsed.error) throw new Error(parsed.error.message || JSON.stringify(parsed.error));
+  if (isWrite && parsed.results && parsed.results.length >= 3) {
+    return { results: [parsed.results[1], parsed.results[parsed.results.length - 1]] };
+  }
   return parsed;
 }
 
 function getResult(resp) {
-  if (!resp || !resp.results || !resp.results[0]) return null;
-  const r = resp.results[0];
+  if (!resp || !resp.results) return null;
+  const idx = resp.results.length >= 4 ? 1 : 0;
+  const r = resp.results[idx];
+  if (!r) return null;
   if (r.type === 'error') throw new Error(r.error ? r.error.message : 'Turso error');
   if (r.response && r.response.result) return r.response.result;
   return null;
