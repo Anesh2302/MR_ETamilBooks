@@ -91,7 +91,7 @@ const initDB = async () => {
     for (const sql of SCHEMA) {
       await c.execute({ sql, args: [] });
     }
-    try { await c.execute({ sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name ON categories(name)", args: [] }); } catch {}
+    await c.execute({ sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_name ON categories(name)", args: [] }).catch(()=>{});
     for (const [name, name_en] of SEED_CATEGORIES) {
       await c.execute({ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: [name, name_en] });
     }
@@ -104,13 +104,19 @@ const initDB = async () => {
     await c.execute({ sql: "INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)", args: ['admin', '["all"]'] });
     const bookCount = await c.execute({ sql: "SELECT COUNT(*) as cnt FROM books", args: [] });
     if (!bookCount.rows || bookCount.rows[0].cnt === 0) {
+      const getCatId = async (nameEn) => {
+        const r = await c.execute({ sql: "SELECT id FROM categories WHERE name_en = ?", args: [nameEn] });
+        return r.rows && r.rows[0] ? Number(r.rows[0].id) : null;
+      };
       const sampleBooks = [
-        ['திருக்குறள்', 'Thirukkural', 'திருவள்ளுவர்', 'Thiruvalluvar', 'ta', 'திருக்குறள் அல்லது திருவள்ளுவர் அறநூல்', 'Ancient Tamil ethical text with 1330 couplets', 'pdf', 1],
-        ['பாரதியார் கவிதைகள்', 'Bharathiyar Poems', 'மகாகவி பாரதியார்', 'Mahakavi Bharathiyar', 'ta', 'மகாகவி சுப்பிரமணிய பாரதியின் தேர்ந்தெடுக்கப்பட்ட கவிதைகள்', 'Selected poems of the great Tamil poet', 'pdf', 9],
-        ['The Alchemist', 'The Alchemist', 'Paulo Coelho', 'Paulo Coelho', 'en', 'A mystical story about following your dreams', 'A mystical story about following your dreams', 'pdf', 5],
+        ['திருக்குறள்', 'Thirukkural', 'திருவள்ளுவர்', 'Thiruvalluvar', 'ta', 'திருக்குறள் அல்லது திருவள்ளுவர் அறநூல்', 'Ancient Tamil ethical text with 1330 couplets', 'pdf', await getCatId('Tamil Literature')],
+        ['பாரதியார் கவிதைகள்', 'Bharathiyar Poems', 'மகாகவி பாரதியார்', 'Mahakavi Bharathiyar', 'ta', 'மகாகவி சுப்பிரமணிய பாரதியின் தேர்ந்தெடுக்கப்பட்ட கவிதைகள்', 'Selected poems of the great Tamil poet', 'pdf', await getCatId('Poetry')],
+        ['The Alchemist', 'The Alchemist', 'Paulo Coelho', 'Paulo Coelho', 'en', 'A mystical story about following your dreams', 'A mystical story about following your dreams', 'pdf', await getCatId('Philosophy')],
       ];
-      for (const [title, title_en, author, author_en, lang, desc, desc_en, file_type, cat_id] of sampleBooks) {
-        await c.execute({ sql: "INSERT INTO books (title, title_ta, author, author_ta, language, description, description_ta, file_type, category_id, uploaded_by, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", args: [title_en, title, author_en, author, lang, desc_en, desc, file_type, cat_id, 1, 'approved'] });
+      for (const [titleTa, titleEn, authorTa, authorEn, lang, descTa, descEn, fileType, catId] of sampleBooks) {
+        if (catId) {
+          await c.execute({ sql: "INSERT INTO books (title, title_ta, author, author_ta, language, description, description_ta, file_type, category_id, uploaded_by, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", args: [titleEn, titleTa, authorEn, authorTa, lang, descEn, descTa, fileType, catId, 1, 'approved'] });
+        }
       }
     }
     initialized = true;
@@ -128,5 +134,5 @@ const ensureInit = async () => {
   await Promise.race([initPromise, new Promise(r => setTimeout(r, 10000))]);
 };
 
-console.log('db.js v16 books');
+console.log('db.js v17 dedup+books');
 module.exports = { initDB, query, queryOne, run, insert };
