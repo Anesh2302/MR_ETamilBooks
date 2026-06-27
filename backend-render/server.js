@@ -369,13 +369,19 @@ function localTranslate(text, targetLang, sourceLang) {
         return null;
     }
     if (targetLang === 'en') {
-        // Tamil→English (direct lookup)
+        // Tamil→English (direct lookup with Unicode normalization)
         const trimmed = text.trim();
+        if (!trimmed) return null;
+        // Try exact match
         if (LOCAL_TRANSLATIONS.en[trimmed]) return LOCAL_TRANSLATIONS.en[trimmed];
+        // Try with NFC normalization
+        const nfc = trimmed.normalize('NFC');
+        if (nfc !== trimmed && LOCAL_TRANSLATIONS.en[nfc]) return LOCAL_TRANSLATIONS.en[nfc];
         // Try partial match for longer texts containing known words
         for (const [ta, en] of Object.entries(LOCAL_TRANSLATIONS.en)) {
-            if (trimmed.includes(ta)) {
-                return trimmed.replace(new RegExp(ta.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), en);
+            if (trimmed.includes(ta) || nfc.includes(ta)) {
+                const esc = ta.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                return trimmed.replace(new RegExp(esc, 'g'), en);
             }
         }
     }
@@ -422,13 +428,13 @@ app.post('/api/translate/text', auth, [
       }
     }
     // Final fallback
-    if (!translated) {
-      translated = '[' + tl.toUpperCase() + '] ' + text;
-      method = 'fallback';
-    }
-    await insert('INSERT INTO translate_history (user_id, source_text, translated_text, source_language, target_language) VALUES (?, ?, ?, ?, ?)',
-      [req.user.id, text, translated, source_language || '', tl]);
-    res.json({ translated_text: translated, source_language, target_language: tl, method });
+  if (!translated) {
+    translated = '[' + tl.toUpperCase() + '] ' + text;
+    if (!method.startsWith('error:')) method = 'fallback';
+  }
+  await insert('INSERT INTO translate_history (user_id, source_text, translated_text, source_language, target_language) VALUES (?, ?, ?, ?, ?)',
+    [req.user.id, text, translated, source_language || '', tl]);
+  res.json({ translated_text: translated, source_language, target_language: tl, method });
   } catch (e) {
     res.status(500).json({ detail: 'Translation failed: ' + e.message });
   }
