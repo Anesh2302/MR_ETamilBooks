@@ -21,6 +21,8 @@ export default function Navbar() {
   const { theme, toggleTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const lastScrollY = useRef(0);
   const router = useRouter();
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -34,9 +36,23 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  useEffect(() => {
+    const handleScroll = () => {
+      const current = window.scrollY;
+      if (current > 80 && current > lastScrollY.current) {
+        setHidden(true);
+      } else {
+        setHidden(false);
+      }
+      lastScrollY.current = current;
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   if (authLoading) {
     return (
-      <nav className="sticky top-0 z-50 glass-nav">
+      <nav className={`sticky top-0 z-50 glass-nav transition-transform duration-300 ${hidden ? '-translate-y-full' : 'translate-y-0'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <Link href="/" className="flex items-center gap-2">
@@ -51,7 +67,7 @@ export default function Navbar() {
   }
 
   return (
-    <nav className="sticky top-0 z-50 glass-nav">
+    <nav className={`sticky top-0 z-50 glass-nav transition-transform duration-300 ${hidden ? '-translate-y-full' : 'translate-y-0'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
           <Link href="/" className="flex items-center gap-2">
