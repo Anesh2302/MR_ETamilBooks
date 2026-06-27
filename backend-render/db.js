@@ -190,4 +190,5 @@ const insert = async (sql, params = []) => {
   }
 };
 
+console.log('db.js v4 with seed data');
 module.exports = { initDB, query, queryOne, run, insert };
