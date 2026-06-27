@@ -452,6 +452,18 @@ app.post('/api/tts/synthesize', auth, [
   res.json({ file_url: fileUrl, duration_seconds: 5.2 });
 });
 
+// --- Debug: test MyMemory directly from server ---
+app.post('/api/debug/mymemory', async (req, res) => {
+  try {
+    const q = encodeURIComponent(req.body.text || 'hello');
+    const pair = req.body.pair || 'ta|en';
+    const url = 'https://api.mymemory.translated.net/get?q=' + q + '&langpair=' + pair + '&de=simonpetercys@gmail.com';
+    const r = await fetch(url);
+    const j = await r.json();
+    res.json({ url, responseData: j.responseData, status: j.responseStatus, quota: j.quotaFinished });
+  } catch (e) { res.json({ error: e.message }); }
+});
+
 // --- Summarize ---
 app.post('/api/summarize', auth, [
   body('text').trim().isLength({ min: 1, max: 10000 }),
