@@ -556,15 +556,17 @@ app.post('/api/admin/scrape-links', auth, adminOnly, async (req, res) => {
   try {
     const pageNum = req.body.page || 1;
     const url = pageNum === 1 ? 'https://freetamilebooks.com/ebooks/' : `https://freetamilebooks.com/ebooks/page/${pageNum}/`;
+    const start = Date.now();
     const listRes = await fetch(url, { signal: AbortSignal.timeout(8000) });
     const html = await listRes.text();
+    const fetchMs = Date.now() - start;
     const $ = cheerio.load(html);
     const links = [];
     $('figure.wp-block-post-featured-image a[href*="/ebooks/"]').each((i, el) => {
       const href = $(el).attr('href');
       if (href) links.push(href);
     });
-    res.json({ page: pageNum, links: [...new Set(links)] });
+    res.json({ page: pageNum, links: [...new Set(links)], htmlLen: html.length, fetchMs });
   } catch (e) {
     res.status(500).json({ detail: e.message });
   }
