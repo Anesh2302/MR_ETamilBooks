@@ -21,24 +21,9 @@ const NODE_ENV = process.env.NODE_ENV || 'production';
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:3000').split(',').map(s => s.trim());
 const isVercel = !!process.env.VERCEL;
 
-// --- Body size limit (must be first to not miss stream data) ---
-if (isVercel) {
-  app.use((req, res, next) => {
-    if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
-        try { if (body) req.body = JSON.parse(body); } catch { req.body = {}; }
-        next();
-      });
-    } else {
-      next();
-    }
-  });
-} else {
-  app.use(express.json({ limit: '1mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-}
+// --- Body size limit ---
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // --- Security headers ---
 app.use(helmet({
