@@ -363,35 +363,42 @@ app.post('/api/translate/text', auth, [
 ], validate, async (req, res) => {
   const { text, source_language, target_language } = req.body;
   const tl = target_language || 'en';
-  let translated;
-  let method = 'none';
-  // Try MyMemory API
   try {
-    const r = await fetch(
-      'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text.slice(0, 500)) +
-      '&langpair=' + (source_language || 'auto') + '|' + tl +
-      '&de=simonpetercys@gmail.com',
-      { signal: AbortSignal.timeout(5000) }
-    );
-    const j = await r.json();
-    if (j.responseData && j.responseData.translatedText && j.responseData.translatedText !== text) {
-      translated = j.responseData.translatedText;
-      method = 'mymemory';
-    }
-  } catch {}
-  // Try local translation as fallback
-  if (!translated) {
+    let translated = null;
+    let method = 'none';
+    // Try local translation first (no network dependency)
     const local = localTranslate(text, tl);
     if (local) { translated = local; method = 'local'; }
+    // Try MyMemory API with timeout
+    if (!translated) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const r = await fetch(
+          'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text.slice(0, 500)) +
+          '&langpair=' + (source_language || 'auto') + '|' + tl +
+          '&de=simonpetercys@gmail.com',
+          { signal: controller.signal }
+        );
+        clearTimeout(timeoutId);
+        const j = await r.json();
+        if (j.responseData && j.responseData.translatedText && j.responseData.translatedText !== text) {
+          translated = j.responseData.translatedText;
+          method = 'mymemory';
+        }
+      } catch {}
+    }
+    // Final fallback
+    if (!translated) {
+      translated = '[' + tl.toUpperCase() + '] ' + text;
+      method = 'fallback';
+    }
+    await insert('INSERT INTO translate_history (user_id, source_text, translated_text, source_language, target_language) VALUES (?, ?, ?, ?, ?)',
+      [req.user.id, text, translated, source_language, tl]);
+    res.json({ translated_text: translated, source_language, target_language: tl, method });
+  } catch (e) {
+    res.status(500).json({ detail: 'Translation failed: ' + e.message });
   }
-  // Final fallback
-  if (!translated) {
-    translated = '[' + tl.toUpperCase() + '] ' + text;
-    method = 'fallback';
-  }
-  await insert('INSERT INTO translate_history (user_id, source_text, translated_text, source_language, target_language) VALUES (?, ?, ?, ?, ?)',
-    [req.user.id, text, translated, source_language, tl]);
-  res.json({ translated_text: translated, source_language, target_language: tl, method });
 });
 
 app.post('/api/translate/detect', (req, res) => {
@@ -435,11 +442,14 @@ app.post('/api/summarize', auth, [
   let translatedSummary = null;
   if (translate_to) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
       const r = await fetch(
         'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(summary.slice(0, 500)) +
         '&langpair=en|' + translate_to + '&de=simonpetercys@gmail.com',
-        { signal: AbortSignal.timeout(5000) }
+        { signal: controller.signal }
       );
+      clearTimeout(timeoutId);
       const j = await r.json();
       if (j.responseData && j.responseData.translatedText) translatedSummary = j.responseData.translatedText;
     } catch {}
@@ -543,7 +553,7 @@ app.post('/api/ocr/translate', auth, uploadLimiter, upload.single('image'), asyn
         const r = await fetch(
           'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(extracted.slice(0, 500)) +
           '&langpair=ta|en&de=simonpetercys@gmail.com',
-          { signal: AbortSignal.timeout(5000) }
+          { signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 5000); return c.signal; })() }
         );
         const j = await r.json();
         if (j.responseData && j.responseData.translatedText) return j.responseData.translatedText;
