@@ -399,21 +399,27 @@ app.post('/api/translate/text', auth, [
     if (!translated) {
       try {
         const sl = source_language || (tl === 'en' ? 'ta' : 'en');
-        const apiUrl = 'https://api.mymemory.translated.net/get' +
-          '?q=' + encodeURIComponent(text.slice(0, 500)) +
-          '&langpair=' + sl + '|' + tl +
-          '&mt=1&de=simonpetercys@gmail.com';
+        const params = new URLSearchParams();
+        params.set('q', text.slice(0, 500));
+        params.set('langpair', sl + '|' + tl);
+        params.set('de', 'simonpetercys@gmail.com');
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
-        const r = await fetch(apiUrl, { signal: controller.signal });
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const r = await fetch('https://api.mymemory.translated.net/get?' + params.toString(), { signal: controller.signal });
         clearTimeout(timeoutId);
         const j = await r.json();
-        const myTxt = j.responseData && j.responseData.translatedText;
-        if (myTxt && myTxt !== text && !myTxt.includes('INVALID SOURCE') && !myTxt.includes('SELECT TWO DISTINCT')) {
-          translated = myTxt;
-          method = 'mymemory';
+        if (j.responseStatus === 429 || (j.quotaFinished)) {
+          method = 'quota_exceeded';
+        } else if (j.responseData && j.responseData.translatedText) {
+          const myTxt = j.responseData.translatedText;
+          if (myTxt !== text && !myTxt.includes('INVALID') && !myTxt.includes('SELECT TWO')) {
+            translated = myTxt;
+            method = 'mymemory';
+          }
         }
-      } catch {}
+      } catch (e) {
+        method = 'error:' + (e.message || 'unknown');
+      }
     }
     // Final fallback
     if (!translated) {
