@@ -162,5 +162,13 @@ const insert = async (sql, params = []) => {
   }
 };
 
-console.log('db.js v5 clean');
+if (process.env.VERCEL) {
+  tursoReq("INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", ['TestCat', 'TestCat EN']).then(r => {
+    tursoReq("SELECT * FROM categories WHERE name = ?", ['TestCat']).then(r2 => {
+      console.log('TURSO TEST: ' + JSON.stringify(parseRows(r2)));
+    }).catch(e => console.error('TURSO TEST SELECT FAIL:', e.message));
+  }).catch(e => console.error('TURSO TEST INSERT FAIL:', e.message));
+}
+
+console.log('db.js v5');
 module.exports = { initDB, query, queryOne, run, insert };
