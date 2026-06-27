@@ -6,7 +6,7 @@ import { getBook, updateProgress, createBookmark, deleteBookmark, getBookmarks }
 import { translateText } from '../../services/translation';
 import { API_URL } from '../../services/api';
 import Layout from '../../components/Layout';
-import { FiBookmark, FiDownload, FiArrowLeft, FiExternalLink, FiChevronLeft, FiChevronRight, FiChevronsLeft, FiChevronsRight, FiRefreshCw, FiMaximize2, FiMinimize2, FiBookOpen, FiFileText } from 'react-icons/fi';
+import { FiBookmark, FiDownload, FiArrowLeft, FiExternalLink, FiChevronLeft, FiChevronRight, FiChevronsLeft, FiChevronsRight, FiRefreshCw, FiBookOpen, FiFileText } from 'react-icons/fi';
 
 type ViewMode = 'tamil' | 'english' | 'side-by-side';
 
@@ -27,15 +27,13 @@ export default function BookDetail() {
   const [viewMode, setViewMode] = useState<ViewMode>('side-by-side');
   const [translations, setTranslations] = useState<Record<number, string>>({});
   const [translating, setTranslating] = useState(false);
-  const [pdfError, setPdfError] = useState(false);
-  const [useProxy, setUseProxy] = useState(false);
+  const [iframeReady, setIframeReady] = useState(false);
   const readerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    setPdfError(false);
-    setUseProxy(false);
+    setIframeReady(false);
     getBook(Number(id))
       .then(res => {
         setBook(res.data);
@@ -146,7 +144,6 @@ export default function BookDetail() {
     ? (book.file_url.startsWith('http') ? book.file_url : `${API_URL}${book.file_url}`)
     : '';
   const absDownloadUrl = `${API_URL}/api/books/${book.id}/download`;
-  const proxyUrl = absFileUrl ? `https://docs.google.com/viewer?url=${encodeURIComponent(absFileUrl)}&embedded=true` : '';
 
   const scrollToReader = () => {
     readerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -352,42 +349,29 @@ export default function BookDetail() {
                 <FiBookOpen size={20} className="text-tamil-400" /> Reader
               </h2>
               <div className="flex items-center gap-2">
-                {pdfError && (
-                  <button onClick={() => { setPdfError(false); setUseProxy(!useProxy); }}
-                    className="text-xs px-3 py-1.5 rounded-lg border transition-all"
-                    style={{ borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}>
-                    {useProxy ? 'Try direct' : 'Try proxy viewer'}
-                  </button>
-                )}
                 <a href={absFileUrl} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-tamil-400 hover:text-tamil-300 hover:bg-tamil-500/10 transition-all border border-transparent hover:border-tamil-500/20">
-                  Open in new tab <FiExternalLink size={14} />
+                  <FiExternalLink size={14} /> Open original
                 </a>
               </div>
             </div>
-            {!pdfError ? (
-              <iframe
-                src={useProxy ? proxyUrl : absFileUrl}
-                className="w-full h-[80vh] rounded-xl transition-opacity duration-300"
-                style={{ border: '1px solid var(--border-color)' }}
-                title={book.title}
-                onError={() => setPdfError(true)}
-              />
-            ) : (
-              <div className="w-full h-[80vh] rounded-xl flex flex-col items-center justify-center gap-4 glass" style={{ border: '1px solid var(--border-color)' }}>
-                <FiFileText size={48} className="text-tamil-500/50" />
-                <p className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>Preview not available</p>
-                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>This PDF cannot be embedded. Try the options below.</p>
-                <div className="flex gap-3 mt-2">
-                  <a href={absDownloadUrl} className="btn-primary text-sm inline-flex items-center gap-2">
-                    <FiDownload size={14} /> Download
-                  </a>
-                  <a href={absFileUrl} target="_blank" rel="noopener noreferrer" className="btn-outline text-sm inline-flex items-center gap-2">
-                    <FiExternalLink size={14} /> Open in New Tab
-                  </a>
+            <div className="w-full h-[80vh] rounded-xl overflow-hidden relative" style={{ border: '1px solid var(--border-color)' }}>
+              {!iframeReady && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3" style={{ background: 'var(--bg-primary)' }}>
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-full border-2 border-white/10" />
+                    <div className="absolute inset-0 w-10 h-10 rounded-full border-t-2 border-tamil-500 animate-spin" />
+                  </div>
+                  <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading book preview...</span>
                 </div>
-              </div>
-            )}
+              )}
+              <iframe
+                src={`https://docs.google.com/viewer?url=${encodeURIComponent(absFileUrl)}&embedded=true`}
+                className={`w-full h-full transition-opacity duration-500 ${iframeReady ? 'opacity-100' : 'opacity-0'}`}
+                title={book.title}
+                onLoad={() => setIframeReady(true)}
+              />
+            </div>
           </div>
         )}
 
