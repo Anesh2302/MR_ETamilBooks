@@ -113,16 +113,16 @@ function getInsertId(resp) {
 const initDB = async () => {
   if (initialized) return;
 
+  const t0 = Date.now();
   try {
-    console.log('initDB: creating users table');
+    console.log('initDB: starting');
     await tursoReq([{ sql: 'CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, full_name TEXT DEFAULT \'\', preferred_language TEXT DEFAULT \'ta\', is_superuser INTEGER DEFAULT 0, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime(\'now\')), updated_at TEXT DEFAULT (datetime(\'now\')))' }]);
-    console.log('initDB: users table created');
+    console.log('initDB: users done, t=' + (Date.now()-t0));
     await tursoReq([{ sql: 'CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, name_en TEXT DEFAULT \'\', book_count INTEGER DEFAULT 0)' }]);
-    console.log('initDB: categories table created');
+    console.log('initDB: cats done, t=' + (Date.now()-t0));
     await tursoReq([{ sql: 'CREATE TABLE IF NOT EXISTS books (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, title_ta TEXT, author TEXT DEFAULT \'\', author_ta TEXT, description TEXT DEFAULT \'\', description_ta TEXT, language TEXT DEFAULT \'ta\', file_type TEXT DEFAULT \'\', file_size INTEGER DEFAULT 0, file_url TEXT DEFAULT \'\', cover_url TEXT DEFAULT \'\', source TEXT DEFAULT \'user_upload\', category_id INTEGER, status TEXT DEFAULT \'pending\', views_count INTEGER DEFAULT 0, downloads_count INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime(\'now\')), updated_at TEXT DEFAULT (datetime(\'now\')), FOREIGN KEY (category_id) REFERENCES categories(id))' }]);
-    console.log('initDB: books table created');
+    console.log('initDB: books done, t=' + (Date.now()-t0));
 
-    console.log('initDB: inserting categories');
     await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['தமிழ் இலக்கியம்', 'Tamil Literature'] }]);
     await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['கதைகள்', 'Stories'] }]);
     await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['கவிதை', 'Poetry'] }]);
@@ -131,12 +131,12 @@ const initDB = async () => {
     await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['கல்வி', 'Education'] }]);
     await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['English Books', 'English Books'] }]);
     await tursoReq([{ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: ['குழந்தை இலக்கியம்', 'Children Literature'] }]);
-    console.log('initDB: categories inserted');
+    console.log('initDB: inserts done, t=' + (Date.now()-t0));
 
     initialized = true;
-    console.log('initDB: complete');
+    console.log('initDB: complete, t=' + (Date.now()-t0));
   } catch (e) {
-    console.error('initDB error:', e.message);
+    console.error('initDB error:', e.message, 't=' + (Date.now()-t0));
   }
 };
 
@@ -145,7 +145,7 @@ const ensureInit = async () => {
   if (!initPromise) {
     initPromise = initDB().then(() => { initialized = true; }).catch(() => {});
   }
-  await Promise.race([initPromise, new Promise(r => setTimeout(r, 6000))]);
+  await Promise.race([initPromise, new Promise(r => setTimeout(r, 10000))]);
 };
 
 const query = async (sql, params = []) => {
