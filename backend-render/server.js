@@ -12,6 +12,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 let _Tesseract = null;
 function getTesseract() { if (!_Tesseract) _Tesseract = require('tesseract.js'); return _Tesseract; }
+const cheerio = require('cheerio');
 const { initDB, query, queryOne, run, insert } = require('./db');
 
 const app = express();
@@ -551,9 +552,58 @@ app.delete('/api/admin/users/:id', auth, adminOnly, [
   res.json({ success: true });
 });
 
-app.post('/api/admin/scrape-freetamilebooks', auth, adminOnly, async (req, res) => {
+app.post('/api/admin/scrape-links', auth, adminOnly, async (req, res) => {
   try {
-    const cheerio = require('cheerio');
+    const pageNum = req.body.page || 1;
+    const url = pageNum === 1 ? 'https://freetamilebooks.com/ebooks/' : `https://freetamilebooks.com/ebooks/page/${pageNum}/`;
+    const listRes = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const html = await listRes.text();
+    const $ = cheerio.load(html);
+    const links = [];
+    $('figure.wp-block-post-featured-image a[href*="/ebooks/"]').each((i, el) => {
+      const href = $(el).attr('href');
+      if (href) links.push(href);
+    });
+    res.json({ page: pageNum, links: [...new Set(links)] });
+  } catch (e) {
+    res.status(500).json({ detail: e.message });
+  }
+});
+
+app.post('/api/admin/scrape-book', auth, adminOnly, async (req, res) => {
+  try {
+    const bookUrl = req.body.url;
+    if (!bookUrl) return res.status(400).json({ detail: 'url required' });
+
+    const r = await fetch(bookUrl, { signal: AbortSignal.timeout(8000) });
+    const html = await r.text();
+    const $ = cheerio.load(html);
+
+    const titleTa = $('h1').first().text().trim();
+    if (!titleTa || titleTa === 'eBooks') return res.json({ added: false, reason: 'no title' });
+
+    const existing = await queryOne('SELECT id FROM books WHERE title_ta = ?', [titleTa]);
+    if (existing) return res.json({ added: false, reason: 'duplicate' });
+
+    let descTa = '';
+    $('p').each((i, el) => {
+      const t = $(el).text().trim();
+      if (t.length > 60 && t.length < 800 && !descTa && !t.startsWith('Download') && !t.startsWith('The post')) descTa = t;
+    });
+
+    let authorTa = 'Free Tamil Ebooks';
+    const bt = $('body').text();
+    const am = bt.match(/ஆசிரியர்[^:]*:\s*([^\n<]+)/i);
+    if (am) authorTa = am[1].trim();
+
+    const cats = [];
+    $('.taxonomy-category a, .wp-block-post-terms a').each((i, el) => cats.push($(el).text().trim()));
+
+    const BLOCKED = ['நாவல்', 'நகைச்சுவை', 'ஆன்மிகம்', 'குறும்பதிவு'];
+    let blocked = false;
+    for (const c of cats) for (const b of BLOCKED) if (c.includes(b)) blocked = true;
+    if (blocked) return res.json({ added: false, reason: 'blocked category' });
+
     const CAT_MAP = {
       'அறிவியல்': 'Science', 'கல்வி': 'Education', 'இலக்கியம்': 'Tamil Literature',
       'கவிதைகள்': 'Poetry', 'வரலாறு': 'History', 'மெய்யியல்': 'Philosophy',
@@ -568,92 +618,38 @@ app.post('/api/admin/scrape-freetamilebooks', auth, adminOnly, async (req, res) 
       'நாடகங்கள்': 'Tamil Literature', 'தேர்ந்தெடுத்த நூல்கள்': 'Tamil Literature',
       'விருது வென்ற நூல்கள்': 'Tamil Literature', 'வரலாற்று நாவல்': 'History',
     };
-    const BLOCKED = ['நாவல்', 'நகைச்சுவை', 'ஆன்மிகம்', 'குறும்பதிவு'];
-    const pageNum = req.body.page || 1;
-    const url = pageNum === 1 ? 'https://freetamilebooks.com/ebooks/' : `https://freetamilebooks.com/ebooks/page/${pageNum}/`;
+    let mapped = null;
+    for (const c of cats) for (const [ta, en] of Object.entries(CAT_MAP)) if (c.includes(ta)) { mapped = en; break; }
+    if (!mapped) return res.json({ added: false, reason: 'no category match' });
+    const catRow = await queryOne('SELECT id FROM categories WHERE name_en = ?', [mapped]);
+    if (!catRow) return res.json({ added: false, reason: 'no category id' });
 
-    const listRes = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    const listHtml = await listRes.text();
-    const $list = cheerio.load(listHtml);
-    const links = [];
-    $list('figure.wp-block-post-featured-image a[href*="/ebooks/"]').each((i, el) => {
-      const href = $list(el).attr('href');
-      if (href) links.push(href);
+    let fileUrl = '';
+    $('a.dlm-download-link').each((i, el) => {
+      const href = $(el).attr('href');
+      const text = $(el).text();
+      if (href && !fileUrl && (text.includes('A4 PDF') || text.includes('.pdf'))) fileUrl = href;
     });
-    const uniqueLinks = [...new Set(links)];
-
-    const existing = new Set((await query('SELECT title FROM books')).map(r => r.title));
-    let added = 0;
-    const maxBooks = Math.min(uniqueLinks.length, 5);
-
-    for (let i = 0; i < maxBooks; i++) {
-      try {
-        const r = await fetch(uniqueLinks[i], { signal: AbortSignal.timeout(10000) });
-        const html = await r.text();
-        const $ = cheerio.load(html);
-
-        const titleTa = $('h1').first().text().trim();
-        if (!titleTa || titleTa === 'eBooks') continue;
-
-        let descTa = '';
-        $('p').each((i, el) => {
-          const t = $(el).text().trim();
-          if (t.length > 60 && t.length < 800 && !descTa && !t.startsWith('Download') && !t.startsWith('The post')) descTa = t;
-        });
-
-        let authorTa = 'Free Tamil Ebooks';
-        const bt = $('body').text();
-        const am = bt.match(/ஆசிரியர்[^:]*:\s*([^\n<]+)/i);
-        if (am) authorTa = am[1].trim();
-
-        const cats = [];
-        $('.taxonomy-category a, .wp-block-post-terms a').each((i, el) => cats.push($(el).text().trim()));
-
-        for (const c of cats) for (const b of BLOCKED) if (c.includes(b)) continue;
-        let mapped = null;
-        for (const c of cats) for (const [ta, en] of Object.entries(CAT_MAP)) if (c.includes(ta)) { mapped = en; break; }
-        if (!mapped) continue;
-
-        const catRow = await queryOne('SELECT id FROM categories WHERE name_en = ?', [mapped]);
-        if (!catRow) continue;
-
-        let fileUrl = '';
-        $('a.dlm-download-link').each((i, el) => {
-          const href = $(el).attr('href');
-          const text = $(el).text();
-          if (href && !fileUrl) {
-            if (text.includes('A4 PDF')) fileUrl = href;
-          }
-        });
-        if (!fileUrl) {
-          $('a.dlm-download-link').each((i, el) => {
-            const href = $(el).attr('href');
-            if (href && !fileUrl) fileUrl = href;
-          });
-        }
-
-        let coverUrl = '';
-        $('img.wp-post-image, .wp-block-post-featured-image img').each((i, el) => {
-          if (!coverUrl) coverUrl = $(el).attr('src') || '';
-        });
-
-        const slug = uniqueLinks[i].replace(/https:\/\/freetamilebooks\.com\/ebooks\//, '').replace(/\/$/, '');
-        const titleEn = slug.replace(/[^a-zA-Z0-9]/g, ' ').replace(/\s+/g, ' ').trim() || titleTa;
-
-        if (existing.has(titleEn)) continue;
-
-        await insert(
-          "INSERT INTO books (title, title_ta, author, author_ta, language, description, description_ta, file_type, file_url, cover_url, category_id, uploaded_by, status, content_text) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-          [titleEn, titleTa, authorTa, authorTa, 'ta', 'Educational Tamil book: ' + titleTa, descTa, 'pdf', fileUrl, coverUrl, Number(catRow.id), 1, 'approved', descTa || (titleTa + ' - ' + authorTa)]
-        );
-        added++;
-        existing.add(titleEn);
-      } catch (e) {
-        continue;
-      }
+    if (!fileUrl) {
+      $('a.dlm-download-link').each((i, el) => {
+        const href = $(el).attr('href');
+        if (href && !fileUrl) fileUrl = href;
+      });
     }
 
-    res.json({ page: pageNum, booksOnPage: uniqueLinks.length, added: added, morePages: pageNum < 57 });
+    let coverUrl = '';
+    $('img.wp-post-image, .wp-block-post-featured-image img').each((i, el) => {
+      if (!coverUrl) coverUrl = $(el).attr('src') || '';
+    });
+
+    const slug = bookUrl.replace(/https:\/\/freetamilebooks\.com\/ebooks\//, '').replace(/\/$/, '');
+    const titleEn = slug.replace(/[^a-zA-Z0-9]/g, ' ').replace(/\s+/g, ' ').trim() || titleTa;
+
+    await insert(
+      "INSERT INTO books (title, title_ta, author, author_ta, language, description, description_ta, file_type, file_url, cover_url, category_id, uploaded_by, status, content_text) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [titleEn, titleTa, authorTa, authorTa, 'ta', 'Educational Tamil book: ' + titleTa, descTa, 'pdf', fileUrl, coverUrl, Number(catRow.id), 1, 'approved', descTa || (titleTa + ' - ' + authorTa)]
+    );
+    res.json({ added: true, title: titleTa });
   } catch (e) {
     res.status(500).json({ detail: e.message });
   }
