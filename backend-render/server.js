@@ -507,6 +507,26 @@ app.post('/api/translate/text', auth, [
         method = 'mymemory_err';
       }
     }
+    // Try Google Translate as fallback
+    if (!translated) {
+      try {
+        const q = encodeURIComponent(text.slice(0, 500));
+        const sl = source_language || (/[\u0B80-\u0BFF]/.test(text) ? 'ta' : 'en');
+        const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=' + sl + '&tl=' + tl + '&dt=t&q=' + q;
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 10000);
+        const r = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        clearTimeout(tid);
+        const j = await r.json();
+        const gt = j && j[0] && j[0].map ? j[0].map((s) => s[0]).filter(Boolean).join('') : null;
+        if (gt && gt !== text) {
+          translated = gt;
+          method = 'google';
+        }
+      } catch (e) {
+        if (!method.startsWith('error:')) method = 'error:google';
+      }
+    }
     // Final fallback
   if (!translated) {
     translated = '[' + tl.toUpperCase() + '] ' + text;
