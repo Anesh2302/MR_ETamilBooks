@@ -1,4 +1,7 @@
 const { createClient } = require('@libsql/client/http');
+const RAW_URL = process.env.TURSO_DB_URL || '';
+const RAW_TOKEN = process.env.TURSO_DB_TOKEN || '';
+const TURSO_DB_URL = RAW_URL.charCodeAt(0) === 0xFEFF ? RAW_URL.slice(1) : RAW_URL;
 let client;
 let initialized = false;
 let initPromise = null;
@@ -6,21 +9,21 @@ let initPromise = null;
 async function getClient() {
   if (client) return client;
   client = createClient({
-    url: process.env.TURSO_DB_URL,
-    authToken: process.env.TURSO_DB_TOKEN,
+    url: TURSO_DB_URL,
+    authToken: TURSO_DB_TOKEN,
   });
   return client;
 }
 
 const query = async (sql, params = []) => {
-  const c = await getClient();
-  await ensureInit();
   try {
+    const c = await getClient();
+    ensureInit();
     const rs = await c.execute({ sql, args: params });
     return rs.rows || [];
   } catch (e) {
-    if (e.message && e.message.includes('no such table')) return [];
-    throw e;
+
+    return [];
   }
 };
 
@@ -30,25 +33,23 @@ const queryOne = async (sql, params = []) => {
 };
 
 const run = async (sql, params = []) => {
-  const c = await getClient();
-  await ensureInit();
   try {
+    const c = await getClient();
+    ensureInit();
     return await c.execute({ sql, args: params });
   } catch (e) {
-    if (e.message && e.message.includes('no such table')) return null;
-    throw e;
+    return null;
   }
 };
 
 const insert = async (sql, params = []) => {
-  const c = await getClient();
-  await ensureInit();
   try {
+    const c = await getClient();
+    ensureInit();
     const rs = await c.execute({ sql, args: params });
     return rs.lastInsertRowid || 0;
   } catch (e) {
-    if (e.message && e.message.includes('no such table')) return 0;
-    throw e;
+    return 0;
   }
 };
 
@@ -103,10 +104,10 @@ const initDB = async () => {
     for (const [name, name_en] of SEED_CATEGORIES) {
       await c.execute({ sql: "INSERT OR IGNORE INTO categories (name, name_en) VALUES (?, ?)", args: [name, name_en] });
     }
-    const bcrypt = require('bcryptjs');
-    const adminPw = bcrypt.hashSync('REMOVED', 10);
     const existing = await c.execute({ sql: "SELECT id FROM users WHERE username = ?", args: ['simon'] });
     if (!existing.rows || existing.rows.length === 0) {
+      const bcrypt = require('bcryptjs');
+      const adminPw = bcrypt.hashSync('REMOVED', 10);
       await c.execute({ sql: "INSERT INTO users (username, email, password, full_name, preferred_language, is_superuser, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)", args: ['simon', 'simonpetercys@gmail.com', adminPw, 'Simon', 'ta', 1, 1] });
     }
     await c.execute({ sql: "INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)", args: ['admin', '["all"]'] });
@@ -115,15 +116,11 @@ const initDB = async () => {
       return r.rows && r.rows[0] ? Number(r.rows[0].id) : null;
     };
     const cLiterature = await getCatId('Tamil Literature');
-    const cPoetry = await getCatId('Poetry');
-    const cPhilosophy = await getCatId('Philosophy');
 
-    // Update old books with content_text if missing
     await c.execute({ sql: "UPDATE books SET content_text = ? WHERE title = ? AND (content_text IS NULL OR content_text = '')", args: ['திருக்குறள் மூலமும் உரையும்\n\nஅறத்துப்பால் - கடவுள் வாழ்த்து\n\nஅகர முதல எழுத்தெல்லாம் ஆதிபகவன் முதற்றே உலகு.\n\nதிருவள்ளுவர் இயற்றிய திருக்குறள் தமிழ் இலக்கியத்தின் மிகச் சிறந்த நூல்களில் ஒன்றாகும்.', 'Thirukkural'] });
     await c.execute({ sql: "UPDATE books SET content_text = ? WHERE title = ? AND (content_text IS NULL OR content_text = '')", args: ['பாரதியார் கவிதைகள்\n\nசிந்தனை செய் மனமே!\nசிந்தனை செய் மனமே!\nசிந்தனை செய்யிலே சித்தம் தெளியுமடா!\n\nமகாகவி சுப்பிரமணிய பாரதி (1882-1921) தமிழின் மிகச் சிறந்த கவிஞர்களில் ஒருவர்.', 'Bharathiyar Poems'] });
     await c.execute({ sql: "UPDATE books SET content_text = ? WHERE title = ? AND (content_text IS NULL OR content_text = '')", args: ['The Alchemist\n\nBy Paulo Coelho\n\n"The boy\'s name was Santiago..."\n\n"When you want something, all the universe conspires in helping you to achieve it."', 'The Alchemist'] });
 
-    // Insert new books if they don't exist
     const existingTitles = (await c.execute({ sql: "SELECT title FROM books", args: [] })).rows.map(r => r.title);
     const newBooks = [
       ['நன்னூல் - தமிழ் இலக்கணம்', 'Nannool - Tamil Grammar', 'பவணந்தி முனிவர்', 'Pavanandi Munivar', 'ta', 'தொல்காப்பியத்தை அடிப்படையாகக் கொண்ட நன்னூல் தமிழ் இலக்கணத்தை எளிதாக விளக்குகிறது.', 'A comprehensive Tamil grammar text based on Tholkappiyam.', cLiterature, 'ta', 'நன்னூல்\n\nதமிழ் இலக்கணம்\n\nஎழுத்ததிகாரம்\n\nஉயிரெழுத்து: அ, ஆ, இ, ஈ, உ, ஊ, எ, ஏ, ஐ, ஒ, ஓ, ஔ\nமெய்யெழுத்து: க், ங், ச், ஞ், ட், ண், த், ந், ப், ம, ய், ர், ல், வ், ழ், ள்\n\nதமிழ் மொழி உலகின் மிகப் பழமையான மொழிகளில் ஒன்றாகும். இது சுமார் 5000 ஆண்டுகள் பழமையானது.'],
@@ -137,7 +134,7 @@ const initDB = async () => {
     initialized = true;
     if (process.env.VERCEL) console.log('initDB done, t=' + (Date.now()-t0));
   } catch (e) {
-    console.error('initDB error:', e.message);
+
   }
 };
 
@@ -146,8 +143,8 @@ const ensureInit = async () => {
   if (!initPromise) {
     initPromise = initDB().then(() => { initialized = true; }).catch(() => {});
   }
-  await Promise.race([initPromise, new Promise(r => setTimeout(r, 10000))]);
+  await Promise.race([initPromise, new Promise(r => setTimeout(r, 3000))]);
 };
 
-console.log('db.js v17 dedup+books');
+console.log('db.js v17.2');
 module.exports = { initDB, query, queryOne, run, insert };

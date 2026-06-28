@@ -1,5 +1,13 @@
 if (!process.env.VERCEL) require('dotenv').config();
 const express = require('express');
+// Patch Express to catch async errors
+const Layer = require('express/lib/router/layer');
+const origHandle = Layer.prototype.handle_request;
+Layer.prototype.handle_request = function (req, res, next) {
+  const result = origHandle.call(this, req, res, next);
+  if (result && typeof result.catch === 'function') result.catch(next);
+  return result;
+};
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
