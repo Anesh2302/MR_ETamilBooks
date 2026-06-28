@@ -1,181 +1,169 @@
-import React, { useEffect, useState } from 'react';
-import { getFlashcardSets, createFlashcardSet, deleteFlashcardSet, getFlashcardSet, addFlashcard, updateFlashcardProgress } from '../../services/translation';
-import { FiLayers, FiPlus, FiTrash2, FiChevronLeft, FiChevronRight, FiCheck, FiX } from 'react-icons/fi';
+import React, { useState, useEffect } from 'react';
+import { getFlashcardSets, getFlashcardSet, updateFlashcardProgress } from '../../services/translation';
+import { FiLayers, FiChevronLeft, FiChevronRight, FiRotateCw, FiCheck, FiX, FiBookOpen } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 export default function FlashcardsPage() {
-  const [sets, setSets] = useState<any[]>([]);
-  const [activeSet, setActiveSet] = useState<any>(null);
-  const [currentCardIdx, setCurrentCardIdx] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
-  const [newSet, setNewSet] = useState({ name: '', source_language: 'en', target_language: 'ta', description: '' });
-  const [newCards, setNewCards] = useState([{ source_text: '', translated_text: '' }]);
+  const [sets, setSets] = useState<{ id: number; title: string; description: string; card_count: number }[]>([]);
+  const [selectedSet, setSelectedSet] = useState<number | null>(null);
+  const [cards, setCards] = useState<any[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadSets();
   }, []);
 
   const loadSets = async () => {
+    setLoading(true);
     try {
       const res = await getFlashcardSets();
       setSets(res.data);
-    } catch (err) {}
+    } catch { toast.error('Failed to load flashcard sets'); }
+    finally { setLoading(false); }
   };
 
-  const openSet = async (id: number) => {
+  const loadCards = async (setId: number) => {
+    setLoading(true);
     try {
-      const res = await getFlashcardSet(id);
-      setActiveSet(res.data);
-      setCurrentCardIdx(0);
-      setShowAnswer(false);
-    } catch (err) {}
+      const res = await getFlashcardSet(setId);
+      setCards(res.data.cards || res.data.flashcards || []);
+      setSelectedSet(setId);
+      setCurrentIndex(0);
+      setFlipped(false);
+    } catch { toast.error('Failed to load flashcards'); }
+    finally { setLoading(false); }
   };
 
-  const handleCreate = async () => {
-    if (!newSet.name.trim()) return;
-    try {
-      await createFlashcardSet({ ...newSet, flashcards: newCards.filter(c => c.source_text && c.translated_text) });
-      toast.success('Flashcard set created!');
-      setShowCreate(false);
-      setNewSet({ name: '', source_language: 'en', target_language: 'ta', description: '' });
-      setNewCards([{ source_text: '', translated_text: '' }]);
+  const handleProgress = async (cardId: number, known: boolean) => {
+    try { await updateFlashcardProgress(cardId, { known }); }
+    catch {}
+    if (currentIndex < cards.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+      setFlipped(false);
+    } else {
+      toast.success('Completed this set!');
+      setSelectedSet(null);
       loadSets();
-    } catch (err) {
-      toast.error('Failed to create set');
     }
   };
 
-  const handleDeleteSet = async (id: number) => {
-    try {
-      await deleteFlashcardSet(id);
-      toast.success('Set deleted');
-      if (activeSet?.id === id) setActiveSet(null);
-      loadSets();
-    } catch (err) {}
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-10 h-10 rounded-full border-2 border-tamil-400/30 border-t-tamil-400 animate-spin" />
+      </div>
+    );
+  }
 
-  const markLearned = async (cardId: number, learned: boolean) => {
-    try {
-      await updateFlashcardProgress(cardId, { is_learned: learned });
-      if (activeSet) {
-        const cards = activeSet.flashcards || [];
-        cards.find((c: any) => c.id === cardId).is_learned = learned;
-        setActiveSet({ ...activeSet, flashcards: [...cards] });
-      }
-    } catch (err) {}
-  };
+  if (selectedSet && cards.length > 0) {
+    const card = cards[currentIndex];
+    return (
+      <div className="space-y-6">
+        <div className="animate-fade-in-up flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/20">
+              <FiLayers size={20} />
+            </div>
+            <div>
+              <h1 className="section-title">Flashcards</h1>
+              <p className="section-subtitle">Card {currentIndex + 1} of {cards.length}</p>
+            </div>
+          </div>
+          <button onClick={() => { setSelectedSet(null); loadSets(); }} className="text-sm glass px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors" style={{ color: 'var(--text-primary)' }}>
+            Browse Sets
+          </button>
+        </div>
 
-  const cards = activeSet?.flashcards || [];
-  const currentCard = cards[currentCardIdx];
+        <div className="flex justify-center">
+          <div className="w-full max-w-lg cursor-pointer" onClick={() => setFlipped(!flipped)}>
+            <div className="card-glass p-10 min-h-[280px] flex items-center justify-center transition-all duration-300 hover:scale-[1.02]">
+              <div className="text-center">
+                <p className="text-xs font-medium tracking-wider uppercase mb-3 opacity-50" style={{ color: 'var(--text-primary)' }}>
+                  {flipped ? 'Translation' : 'Term'}
+                </p>
+                <p className="text-xl md:text-2xl font-semibold leading-relaxed" style={{ color: 'var(--text-primary)' }}>
+                  {flipped ? card.translated_word : card.word}
+                </p>
+                {card.example_sentence && (
+                  <p className="text-sm mt-4 italic opacity-60 max-w-sm mx-auto" style={{ color: 'var(--text-secondary)' }}>
+                    "{flipped ? (card.translated_example || card.example_sentence) : card.example_sentence}"
+                  </p>
+                )}
+                <p className="text-xs mt-4 opacity-40" style={{ color: 'var(--text-secondary)' }}>Tap to flip</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-center gap-4 animate-fade-in">
+          <button onClick={() => handleProgress(card.id, false)} className="btn-secondary inline-flex items-center gap-2 px-6">
+            <FiX size={16} /> Don't Know
+          </button>
+          <button onClick={() => { setFlipped(!flipped); }} className="glass p-3 rounded-xl hover:bg-white/10 transition-colors">
+            <FiRotateCw size={18} style={{ color: 'var(--text-secondary)' }} />
+          </button>
+          <button onClick={() => handleProgress(card.id, true)} className="btn-primary inline-flex items-center gap-2 px-6">
+            <FiCheck size={16} /> Know It
+          </button>
+        </div>
+
+        <div className="flex justify-center gap-2">
+          <button onClick={() => { if (currentIndex > 0) { setCurrentIndex(prev => prev - 1); setFlipped(false); } }}
+            disabled={currentIndex === 0} className="glass p-2 rounded-lg disabled:opacity-30 hover:bg-white/10 transition-colors">
+            <FiChevronLeft size={16} style={{ color: 'var(--text-secondary)' }} />
+          </button>
+          <div className="flex gap-1.5 items-center">
+            {cards.map((_, i) => (
+              <span key={i} className={`w-2 h-2 rounded-full transition-all duration-300 ${i === currentIndex ? 'bg-tamil-400 w-4' : 'bg-white/20'}`} />
+            ))}
+          </div>
+          <button onClick={() => { if (currentIndex < cards.length - 1) { setCurrentIndex(prev => prev + 1); setFlipped(false); } }}
+            disabled={currentIndex >= cards.length - 1} className="glass p-2 rounded-lg disabled:opacity-30 hover:bg-white/10 transition-colors">
+            <FiChevronRight size={16} style={{ color: 'var(--text-secondary)' }} />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-white">Flashcards</h1>
-        <button onClick={() => setShowCreate(!showCreate)} className="btn-primary flex items-center">
-          <FiPlus className="mr-2" /> New Set
-        </button>
+      <div className="animate-fade-in-up">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/20">
+            <FiLayers size={20} />
+          </div>
+          <div>
+            <h1 className="section-title">Flashcards</h1>
+            <p className="section-subtitle">Browse flashcard sets to study vocabulary</p>
+          </div>
+        </div>
       </div>
 
-      {showCreate && (
-        <div className="card space-y-4">
-          <h2 className="font-semibold text-lg">Create Flashcard Set</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <input className="input-field" placeholder="Set name *" value={newSet.name} onChange={(e) => setNewSet({ ...newSet, name: e.target.value })} />
-            <select className="input-field" value={newSet.source_language} onChange={(e) => setNewSet({ ...newSet, source_language: e.target.value })}>
-              <option value="en">English</option>
-              <option value="ta">தமிழ்</option>
-              <option value="hi">हिन्दी</option>
-            </select>
-            <select className="input-field" value={newSet.target_language} onChange={(e) => setNewSet({ ...newSet, target_language: e.target.value })}>
-              <option value="ta">தமிழ்</option>
-              <option value="en">English</option>
-              <option value="hi">हिन्दी</option>
-            </select>
-          </div>
-          <input className="input-field" placeholder="Description (optional)" value={newSet.description} onChange={(e) => setNewSet({ ...newSet, description: e.target.value })} />
-
-          <div className="space-y-2">
-            {newCards.map((card, i) => (
-              <div key={i} className="flex space-x-2">
-                <input className="input-field flex-1" placeholder="Word/Text" value={card.source_text} onChange={(e) => { const c = [...newCards]; c[i].source_text = e.target.value; setNewCards(c); }} />
-                <input className="input-field flex-1" placeholder="Translation" value={card.translated_text} onChange={(e) => { const c = [...newCards]; c[i].translated_text = e.target.value; setNewCards(c); }} />
-                {newCards.length > 1 && <button onClick={() => setNewCards(newCards.filter((_, j) => j !== i))} className="p-2 text-red-500"><FiX /></button>}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {sets.map((set, i) => (
+          <div key={set.id} className="card-glass p-5 cursor-pointer hover:scale-[1.02] transition-all duration-300 animate-fade-in-up group"
+            style={{ animationDelay: `${i * 0.05}s` }} onClick={() => loadCards(set.id)}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center">
+                <FiBookOpen size={16} className="text-amber-400" />
               </div>
-            ))}
-            <button onClick={() => setNewCards([...newCards, { source_text: '', translated_text: '' }])} className="text-sm text-tamil-400 hover:text-tamil-500">+ Add another card</button>
-          </div>
-
-          <button onClick={handleCreate} className="btn-primary">Create Set</button>
-        </div>
-      )}
-
-      {activeSet ? (
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <button onClick={() => setActiveSet(null)} className="flex items-center text-gray-400 hover:text-gray-200"><FiChevronLeft className="mr-1" /> Back</button>
-            <h2 className="font-semibold text-lg">{activeSet.name}</h2>
-            <span className="text-sm text-gray-300">{cards.filter((c: any) => c.is_learned).length}/{cards.length} learned</span>
-          </div>
-
-          {cards.length === 0 ? (
-            <div className="text-center py-8 text-gray-300">No cards in this set</div>
-          ) : (
-            <div>
-              <div className="bg-gradient-to-br from-tamil-900/30 to-orange-900/20 rounded-xl p-8 min-h-[250px] flex flex-col items-center justify-center cursor-pointer border border-white/10" onClick={() => setShowAnswer(!showAnswer)}>
-                <p className="text-2xl font-semibold text-gray-100 text-center">{showAnswer ? currentCard?.translated_text : currentCard?.source_text}</p>
-                <p className="text-sm text-gray-300 mt-4">{showAnswer ? 'Translation' : 'Tap to reveal answer'}</p>
-              </div>
-
-              <div className="flex items-center justify-between mt-6">
-                <button onClick={() => { setCurrentCardIdx(Math.max(0, currentCardIdx - 1)); setShowAnswer(false); }} className="btn-secondary" disabled={currentCardIdx === 0}>
-                  <FiChevronLeft className="mr-1" /> Previous
-                </button>
-
-                <div className="flex space-x-2">
-                  <button onClick={() => markLearned(currentCard.id, false)} className={`p-2 rounded-lg ${!currentCard?.is_learned ? 'bg-red-500/10 text-red-400' : 'bg-white/5 text-gray-300'}`}>
-                    <FiX size={20} />
-                  </button>
-                  <button onClick={() => markLearned(currentCard.id, true)} className={`p-2 rounded-lg ${currentCard?.is_learned ? 'bg-green-500/10 text-green-400' : 'bg-white/5 text-gray-300'}`}>
-                    <FiCheck size={20} />
-                  </button>
-                </div>
-
-                <button onClick={() => { setCurrentCardIdx(Math.min(cards.length - 1, currentCardIdx + 1)); setShowAnswer(false); }} className="btn-secondary" disabled={currentCardIdx === cards.length - 1}>
-                  Next <FiChevronRight className="ml-1" />
-                </button>
-              </div>
-
-              <div className="flex justify-center mt-4 space-x-1">
-                {cards.map((_: any, i: number) => (
-                  <div key={i} className={`w-2 h-2 rounded-full ${i === currentCardIdx ? 'bg-tamil-500' : 'bg-white/20'}`} />
-                ))}
-              </div>
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-white/10" style={{ color: 'var(--text-secondary)' }}>
+                {set.card_count} cards
+              </span>
             </div>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {sets.map((set: any) => (
-            <div key={set.id} className="card cursor-pointer hover:shadow-md group" onClick={() => openSet(set.id)}>
-              <div className="flex items-center justify-between mb-3">
-                <FiLayers size={24} className="text-tamil-500" />
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteSet(set.id); }} className="text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100"><FiTrash2 size={16} /></button>
-              </div>
-              <h3 className="font-semibold text-white">{set.name}</h3>
-              <p className="text-sm text-gray-400">{set.flashcard_count} cards</p>
-              <p className="text-xs text-gray-300 mt-1">{set.source_language} → {set.target_language}</p>
-            </div>
-          ))}
-          {sets.length === 0 && (
-            <div className="col-span-full text-center py-12 text-gray-300">
-              <FiLayers size={48} className="mx-auto text-gray-200 mb-4" />
-              <p>No flashcard sets yet. Create your first one!</p>
-            </div>
-          )}
-        </div>
-      )}
+            <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{set.title}</h3>
+            <p className="text-xs mt-1 line-clamp-2" style={{ color: 'var(--text-secondary)' }}>{set.description || 'No description'}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="glass p-10 rounded-xl text-center animate-fade-in">
+        <FiLayers size={32} className="mx-auto mb-3 opacity-30" style={{ color: 'var(--text-secondary)' }} />
+        <p style={{ color: 'var(--text-secondary)' }}>No flashcard sets available</p>
+      </div>
     </div>
   );
 }

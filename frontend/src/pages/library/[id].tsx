@@ -5,7 +5,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getBook, updateProgress, createBookmark, deleteBookmark, getBookmarks } from '../../services/books';
 import { translateText } from '../../services/translation';
 import { API_URL } from '../../services/api';
-import Layout from '../../components/Layout';
 import { FiBookmark, FiDownload, FiArrowLeft, FiExternalLink, FiChevronLeft, FiChevronRight, FiChevronsLeft, FiChevronsRight, FiRefreshCw, FiBookOpen, FiFileText } from 'react-icons/fi';
 
 type ViewMode = 'tamil' | 'english' | 'side-by-side';
@@ -113,28 +112,24 @@ export default function BookDetail() {
 
   if (loading) {
     return (
-      <Layout title="Loading...">
-        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 animate-fade-in">
-          <div className="relative">
-            <div className="w-16 h-16 rounded-full border-2 border-white/10" />
-            <div className="absolute inset-0 w-16 h-16 rounded-full border-t-2 border-tamil-500 animate-spin" />
-          </div>
-          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading book...</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 animate-fade-in">
+        <div className="relative">
+          <div className="w-16 h-16 rounded-full border-2 border-white/10" />
+          <div className="absolute inset-0 w-16 h-16 rounded-full border-t-2 border-tamil-500 animate-spin" />
         </div>
-      </Layout>
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading book...</p>
+      </div>
     );
   }
 
   if (error || !book) {
     return (
-      <Layout title="Not Found">
-        <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
-          <div className="text-7xl mb-6 animate-float">📚</div>
-          <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Book Not Found</h1>
-          <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>{error || 'The book does not exist.'}</p>
-          <Link href="/library" className="btn-primary">Back to Library</Link>
-        </div>
-      </Layout>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
+        <div className="text-7xl mb-6 animate-float">📚</div>
+        <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Book Not Found</h1>
+        <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>{error || 'The book does not exist.'}</p>
+        <Link href="/library" className="btn-primary">Back to Library</Link>
+      </div>
     );
   }
 
@@ -153,8 +148,7 @@ export default function BookDetail() {
   const pageTranslation = translations[currentPage];
 
   return (
-    <Layout title={book.title_ta || book.title}>
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="space-y-8">
         <Link href="/library" className="inline-flex items-center gap-1.5 text-tamil-400 hover:text-tamil-300 transition-all hover:gap-2 animate-fade-in">
           <FiArrowLeft size={16} /> Back to Library
         </Link>
@@ -378,6 +372,5 @@ export default function BookDetail() {
           </div>
         )}
       </div>
-    </Layout>
   );
 }

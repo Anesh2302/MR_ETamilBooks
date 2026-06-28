@@ -1,31 +1,48 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { getLanguages, translateText, translateDocument, getTranslationHistory } from '../../services/translation';
-import { FiUpload, FiCopy, FiCheck, FiDownload, FiRefreshCw, FiFileText } from 'react-icons/fi';
+import React, { useState } from 'react';
+import { translateText, translateDocument } from '../../services/translation';
+import { FiGlobe, FiRepeat, FiUpload, FiCopy, FiCheck, FiArrowDown } from 'react-icons/fi';
 import { toast } from 'react-toastify';
-import { useAuth } from '../../contexts/AuthContext';
 
-export default function Translate() {
-  const { isAuthenticated } = useAuth();
-  const [languages, setLanguages] = useState<any[]>([]);
+const languages: Record<string, string> = {
+  ta: 'தமிழ்',
+  en: 'English',
+  hi: 'हिन्दी',
+  ml: 'മലയാളം',
+  te: 'తెలుగు',
+  kn: 'ಕನ್ನಡ',
+  bn: 'বাংলা',
+  mr: 'मराठी',
+  gu: 'ગુજરાતી',
+  or: 'ଓଡ଼ିଆ',
+  pa: 'ਪੰਜਾਬੀ',
+  fr: 'Français',
+  es: 'Español',
+  de: 'Deutsch',
+  ja: '日本語',
+  zh: '中文',
+  ar: 'العربية',
+  ru: 'Русский',
+  pt: 'Português',
+};
+
+type Mode = 'text' | 'document';
+
+export default function TranslatePage() {
+  const [mode, setMode] = useState<Mode>('text');
   const [sourceText, setSourceText] = useState('');
+  const [sourceLang, setSourceLang] = useState('ta');
+  const [targetLang, setTargetLang] = useState('en');
   const [translatedText, setTranslatedText] = useState('');
-  const [sourceLang, setSourceLang] = useState('en');
-  const [targetLang, setTargetLang] = useState('ta');
   const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [history, setHistory] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'text' | 'document'>('text');
+  const [copied, setCopied] = useState('');
   const [docFile, setDocFile] = useState<File | null>(null);
-  const [docTranslating, setDocTranslating] = useState(false);
-  const [docResult, setDocResult] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    getLanguages().then((res) => setLanguages(res.data)).catch(() => {});
-    if (isAuthenticated) {
-      getTranslationHistory().then((res) => setHistory(res.data.slice(0, 10))).catch(() => {});
-    }
-  }, [isAuthenticated]);
+  const swapLangs = () => {
+    setSourceLang(targetLang);
+    setTargetLang(sourceLang);
+    setSourceText(translatedText);
+    setTranslatedText(sourceText);
+  };
 
   const handleTranslate = async () => {
     if (!sourceText.trim()) return;
@@ -33,157 +50,141 @@ export default function Translate() {
     try {
       const res = await translateText({ text: sourceText, source_language: sourceLang, target_language: targetLang });
       setTranslatedText(res.data.translated_text);
-    } catch (err: any) {
-      toast.error('Translation failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const swapLanguages = () => {
-    setSourceLang(targetLang);
-    setTargetLang(sourceLang);
-    setSourceText(translatedText);
-    setTranslatedText('');
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-    toast.success('Copied to clipboard');
+    } catch { toast.error('Translation failed'); }
+    finally { setLoading(false); }
   };
 
   const handleDocTranslate = async () => {
     if (!docFile) return;
-    setDocTranslating(true);
-    setDocResult(null);
+    setLoading(true);
     const formData = new FormData();
     formData.append('file', docFile);
     formData.append('source_language', sourceLang);
     formData.append('target_language', targetLang);
     try {
       const res = await translateDocument(formData);
-      setDocResult(res.data.translated_text);
-      toast.success('Document translated successfully');
-      setDocFile(null);
-      if (fileRef.current) fileRef.current.value = '';
-    } catch (err) {
-      toast.error('Document translation failed');
-    } finally {
-      setDocTranslating(false);
-    }
+      setTranslatedText(res.data.translated_text);
+      toast.success('Document translated!');
+    } catch { toast.error('Document translation failed'); }
+    finally { setLoading(false); }
+  };
+
+  const copyText = (label: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(''), 2000);
   };
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-white">Translation</h1>
-
-      <div className="flex space-x-1 bg-white/5 rounded-lg p-1 w-fit">
-        <button onClick={() => setActiveTab('text')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'text' ? 'bg-white/5 shadow-sm text-tamil-400' : 'text-gray-400'}`}>
-          Text Translation
-        </button>
-        <button onClick={() => setActiveTab('document')} className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'document' ? 'bg-white/5 shadow-sm text-tamil-400' : 'text-gray-400'}`}>
-          Document Upload
-        </button>
+      <div className="animate-fade-in-up">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/20">
+            <FiGlobe size={20} />
+          </div>
+          <div>
+            <h1 className="section-title">Translation</h1>
+            <p className="section-subtitle">Translate between 20+ languages</p>
+          </div>
+        </div>
       </div>
 
-      {activeTab === 'text' ? (
-        <div className="space-y-4">
-          <div className="flex items-center space-x-2">
-            <select className="input-field w-40" value={sourceLang} onChange={(e) => setSourceLang(e.target.value)}>
-              {languages.map((l: any) => <option key={l.code} value={l.code}>{l.name}</option>)}
-            </select>
-            <button onClick={swapLanguages} className="p-2 rounded-lg hover:bg-white/10"><FiRefreshCw className="text-gray-400" /></button>
-            <select className="input-field w-40" value={targetLang} onChange={(e) => setTargetLang(e.target.value)}>
-              {languages.map((l: any) => <option key={l.code} value={l.code}>{l.name}</option>)}
+      <div className="card-glass p-6 md:p-8 animate-fade-in-up space-y-5">
+        <div className="flex gap-1 glass p-1 rounded-xl w-fit" style={{ background: 'var(--bg-secondary)' }}>
+          <button onClick={() => setMode('text')} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${mode === 'text' ? 'bg-tamil-500/20 text-tamil-400 shadow-sm' : ''}`} style={{ color: mode === 'text' ? undefined : 'var(--text-primary)' }}>
+            <FiGlobe size={14} className="inline mr-1.5" /> Text
+          </button>
+          <button onClick={() => setMode('document')} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${mode === 'document' ? 'bg-tamil-500/20 text-tamil-400 shadow-sm' : ''}`} style={{ color: mode === 'document' ? undefined : 'var(--text-primary)' }}>
+            <FiUpload size={14} className="inline mr-1.5" /> Document
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <select className="input-field" value={sourceLang} onChange={(e) => setSourceLang(e.target.value)}>
+              {Object.entries(languages).map(([code, name]) => <option key={code} value={code}>{name}</option>)}
             </select>
           </div>
+          <button onClick={swapLangs} className="glass p-2.5 rounded-xl hover:bg-white/10 transition-colors" title="Swap languages">
+            <FiRepeat size={18} style={{ color: 'var(--text-secondary)' }} />
+          </button>
+          <div className="flex-1">
+            <select className="input-field" value={targetLang} onChange={(e) => setTargetLang(e.target.value)}>
+              {Object.entries(languages).map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+            </select>
+          </div>
+        </div>
 
+        {mode === 'text' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <textarea
-                className="input-field h-48 resize-none"
-                placeholder="Enter text to translate..."
-                value={sourceText}
-                onChange={(e) => setSourceText(e.target.value)}
-              />
-              <div className="flex justify-between mt-2">
-                <span className="text-xs text-gray-400">{sourceText.length} characters</span>
-                {sourceText && <button onClick={() => { setSourceText(''); setTranslatedText(''); }} className="text-xs text-red-500">Clear</button>}
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>Source Text</label>
+              <textarea className="input-field h-40 resize-none" placeholder={`Enter text in ${languages[sourceLang]}...`} value={sourceText} onChange={(e) => setSourceText(e.target.value)} />
+              <div className="flex justify-between mt-1">
+                <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{sourceText.length} characters</span>
               </div>
             </div>
             <div>
-              <div className="input-field h-48 resize-none overflow-y-auto">
-                {loading ? <div className="animate-pulse text-gray-400">Translating...</div> : translatedText || <span className="text-gray-400">Translation will appear here</span>}
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>Translation ({languages[targetLang]})</label>
+              <div className="input-field h-40 overflow-y-auto whitespace-pre-wrap" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+                {loading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <span className="w-5 h-5 rounded-full border-2 border-tamil-400/30 border-t-tamil-400 animate-spin" />
+                  </div>
+                ) : translatedText}
               </div>
-              {translatedText && (
-                <button onClick={() => copyToClipboard(translatedText)} className="mt-2 text-sm text-gray-400 hover:text-tamil-400 flex items-center">
-                  {copied ? <><FiCheck className="mr-1" /> Copied</> : <><FiCopy className="mr-1" /> Copy</>}
+              {translatedText && !loading && (
+                <button onClick={() => copyText('translation', translatedText)} className="mt-1 text-xs flex items-center gap-1 hover:text-tamil-400 transition-colors" style={{ color: 'var(--text-secondary)' }}>
+                  {copied === 'translation' ? <><FiCheck size={12} /> Copied</> : <><FiCopy size={12} /> Copy</>}
                 </button>
               )}
             </div>
           </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>Upload Document</label>
+              <div className="glass p-3 rounded-xl">
+                <input type="file" onChange={(e) => setDocFile(e.target.files?.[0] || null)}
+                  className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-violet-500/10 file:text-violet-400 hover:file:bg-violet-500/20 transition-colors cursor-pointer"
+                  style={{ color: 'var(--text-secondary)' }} accept=".pdf,.doc,.docx,.txt" />
+              </div>
+              {docFile && <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>{docFile.name} ({(docFile.size / 1024).toFixed(1)} KB)</p>}
+            </div>
 
-          <button onClick={handleTranslate} className="btn-primary" disabled={loading || !sourceText.trim()}>
-            {loading ? 'Translating...' : 'Translate'}
-          </button>
-
-          {isAuthenticated && history.length > 0 && (
-            <div className="card mt-6">
-              <h3 className="font-semibold text-white mb-3">Recent Translations</h3>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {history.map((h: any) => (
-                  <div key={h.id} className="text-sm p-2 bg-white/5 rounded flex justify-between items-start">
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate text-gray-300">{h.source_text}</p>
-                      <p className="truncate text-white font-medium">{h.translated_text}</p>
-                    </div>
-                    <span className="text-xs text-gray-400 ml-2 whitespace-nowrap">{h.source_language} → {h.target_language}</span>
+            <div>
+              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>Translation</label>
+              <div className="input-field h-32 overflow-y-auto whitespace-pre-wrap" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+                {loading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <span className="w-5 h-5 rounded-full border-2 border-tamil-400/30 border-t-tamil-400 animate-spin" />
                   </div>
-                ))}
+                ) : translatedText}
               </div>
             </div>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          {mode === 'text' ? (
+            <button onClick={handleTranslate} className="btn-primary inline-flex items-center gap-2" disabled={loading || !sourceText.trim()}>
+              {loading ? (
+                <><span className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin" /> Translating...</>
+              ) : (
+                <><FiGlobe size={16} /> Translate</>
+              )}
+            </button>
+          ) : (
+            <button onClick={handleDocTranslate} className="btn-primary inline-flex items-center gap-2" disabled={loading || !docFile}>
+              {loading ? (
+                <><span className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin" /> Translating...</>
+              ) : (
+                <><FiUpload size={16} /> Translate Document</>
+              )}
+            </button>
           )}
         </div>
-      ) : (
-        <div className="card">
-          <div className="py-8">
-            <div className="text-center">
-              <FiFileText size={48} className="mx-auto text-gray-300 mb-4" />
-              <h2 className="text-xl font-semibold text-white mb-2">Upload Document for Translation</h2>
-              <p className="text-gray-400 mb-6">Supports PDF, DOCX, TXT</p>
-              <div className="flex items-center justify-center space-x-4">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept=".pdf,.docx,.txt"
-                  onChange={(e) => setDocFile(e.target.files?.[0] || null)}
-                  className="hidden"
-                  id="doc-upload"
-                />
-                <label htmlFor="doc-upload" className="btn-secondary cursor-pointer flex items-center">
-                  <FiUpload className="mr-2" /> Choose File
-                </label>
-                <button onClick={handleDocTranslate} className="btn-primary" disabled={!docFile || docTranslating}>
-                  {docTranslating ? 'Translating...' : 'Translate Document'}
-                </button>
-              </div>
-              {docFile && (
-                <p className="mt-4 text-sm text-gray-300">Selected: {docFile.name} ({(docFile.size / 1024).toFixed(1)} KB)</p>
-              )}
-            </div>
-            {docResult && (
-              <div className="mt-6">
-                <h3 className="text-sm font-medium text-gray-400 mb-2">Translated Text</h3>
-                <div className="input-field h-64 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                  {docResult}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

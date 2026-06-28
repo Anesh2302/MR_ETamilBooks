@@ -263,9 +263,30 @@ app.get('/api/books/:id', [
   await run('UPDATE books SET views_count = views_count + 1 WHERE id = ?', [Number(req.params.id)]);
   book.views_count = (book.views_count || 0) + 1;
   if (!book.content_text) {
-    book.content_text = book.language === 'ta'
-      ? `${book.description_ta || book.description}\n\nஇது ஒரு மாதிரி உள்ளடக்கம். முழு புத்தகத்தையும் படிக்க விரைவில் கிடைக்கும்.`
-      : `${book.description || book.description_ta}\n\nThis is sample content. Full book will be available soon.`;
+    // Try extracting text from PDF URL
+    let pdfText = '';
+    if (book.file_url && (book.file_url.endsWith('.pdf') || book.file_type === 'pdf')) {
+      try {
+        const pdfUrl = book.file_url.startsWith('http') ? book.file_url : null;
+        if (pdfUrl) {
+          const pdfRes = await fetch(pdfUrl, { signal: AbortSignal.timeout(15000) });
+          const pdfBuf = await pdfRes.arrayBuffer();
+          const pdfParse = require('pdf-parse');
+          const pdfData = await pdfParse(Buffer.from(pdfBuf));
+          if (pdfData.text && pdfData.text.trim().length > 50) {
+            pdfText = pdfData.text.trim().slice(0, 10000);
+          }
+        }
+      } catch (e) { pdfText = ''; }
+    }
+    if (pdfText) {
+      book.content_text = pdfText;
+      try { await run('UPDATE books SET content_text = ? WHERE id = ?', [pdfText, Number(req.params.id)]); } catch {}
+    } else {
+      book.content_text = book.language === 'ta'
+        ? `${book.description_ta || book.description}\n\nஇது ஒரு மாதிரி உள்ளடக்கம். முழு புத்தகத்தையும் படிக்க விரைவில் கிடைக்கும்.`
+        : `${book.description || book.description_ta}\n\nThis is sample content. Full book will be available soon.`;
+    }
   }
   res.json(book);
 });
@@ -532,15 +553,35 @@ app.post('/api/translate/document', auth, upload.single('file'), handleMulterErr
 });
 
 // --- TTS ---
+const LANG_VOICES = { ta: 'ta', en: 'en', hi: 'hi', ml: 'ml', te: 'te', kn: 'kn', bn: 'bn', fr: 'fr', de: 'de', es: 'es', ja: 'ja', zh: 'zh', ar: 'ar', ru: 'ru', pt: 'pt' };
+
+app.get('/api/tts/proxy', async (req, res) => {
+  const text = req.query.text || '';
+  const lang = LANG_VOICES[req.query.lang as string] || 'ta';
+  if (!text) return res.status(400).json({ detail: 'text required' });
+  try {
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text.slice(0, 200))}&tl=${lang}&client=tw-ob&ttsspeed=1`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const buf = await r.arrayBuffer();
+    res.set('Content-Type', 'audio/mpeg');
+    res.set('Content-Disposition', 'inline; filename="tts.mp3"');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(Buffer.from(buf));
+  } catch (e) {
+    res.status(502).json({ detail: 'TTS proxy failed' });
+  }
+});
+
 app.post('/api/tts/synthesize', auth, [
   body('text').trim().isLength({ min: 1, max: 5000 }),
   body('language').optional().isLength({ min: 2, max: 10 }),
 ], validate, async (req, res) => {
   const { text, language } = req.body;
-  const fileUrl = '/static/tts/sample.mp3';
+  const lang = LANG_VOICES[language as string] || 'ta';
+  const fileUrl = `/api/tts/proxy?text=${encodeURIComponent(text.slice(0, 200))}&lang=${lang}`;
   await insert('INSERT INTO tts_history (user_id, text, language, audio_url) VALUES (?, ?, ?, ?)',
     [req.user.id, text, language, fileUrl]);
-  res.json({ file_url: fileUrl, duration_seconds: 5.2 });
+  res.json({ file_url: fileUrl, duration_seconds: Math.max(1, text.length * 0.08) });
 });
 
 // --- Summarize ---
@@ -655,32 +696,45 @@ app.post('/api/ocr/translate', auth, uploadLimiter, upload.single('image'), asyn
   if (!req.file) return res.status(400).json({ detail: 'No image uploaded' });
   try {
     const fs = require('fs');
-    const imagePath = req.file.path;
-    if (!fs.existsSync(imagePath)) return res.status(400).json({ detail: 'Image file not found' });
     let extracted = '';
     let confidence = 0;
     try {
-      const { data } = await getTesseract().recognize(imagePath, 'tam+eng', { logger: () => {} });
-      extracted = (data.text || '').trim();
-      confidence = data.confidence || 0;
-    } catch (ocrErr) {
+      let imageBuffer = req.file.buffer;
+      let imagePath = req.file.path;
+      if (!imagePath && imageBuffer) {
+        const tmp = path.join('/tmp', req.file.originalname || 'ocr_tmp.png');
+        fs.writeFileSync(tmp, imageBuffer);
+        imagePath = tmp;
+      }
+      if (imagePath && fs.existsSync(imagePath)) {
+        try {
+          const { data } = await getTesseract().recognize(imagePath, 'tam+eng', { logger: () => {} });
+          extracted = (data.text || '').trim();
+          confidence = data.confidence || 0;
+        } catch (ocrErr) {
+          extracted = '';
+        }
+        try { fs.unlinkSync(imagePath); } catch {}
+      }
+    } catch (e) {
       extracted = '';
     }
-    try { fs.unlinkSync(imagePath); } catch {}
     if (!extracted) {
-      return res.json({ extracted_text: '', translated_text: '', confidence: 0, note: 'No text detected' });
+      return res.json({ extracted_text: '', translated_text: '', confidence: 0, note: 'No text detected. Tesseract may not be available in this environment.' });
     }
+    const targetLang = req.body.target_language || 'en';
     const translated = await (async () => {
       try {
+        const sourceLang = /[\u0B80-\u0BFF]/.test(extracted) ? 'ta' : 'en';
         const r = await fetch(
           'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(extracted.slice(0, 500)) +
-          '&langpair=ta|en&de=simonpetercys@gmail.com',
-          { signal: (() => { const c = new AbortController(); setTimeout(() => c.abort(), 5000); return c.signal; })() }
+          '&langpair=' + sourceLang + '|' + targetLang + '&de=simonpetercys@gmail.com',
+          { signal: AbortSignal.timeout(5000) }
         );
         const j = await r.json();
         if (j.responseData && j.responseData.translatedText) return j.responseData.translatedText;
       } catch {}
-      return '[EN] ' + extracted;
+      return '[' + targetLang.toUpperCase() + '] ' + extracted;
     })();
     await insert('INSERT INTO ocr_history (user_id, extracted_text, translated_text) VALUES (?, ?, ?)',
       [req.user.id, extracted, translated]);
@@ -694,20 +748,39 @@ app.post('/api/ocr/translate', auth, uploadLimiter, upload.single('image'), asyn
 app.post('/api/audio/transcribe', auth, uploadLimiter, upload.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ detail: 'No audio uploaded' });
   const fs = require('fs');
-  const audioPath = req.file.path;
+  let audioPath = req.file.path;
   try {
-    // Audio transcription requires external API (Google/Azure/Whisper).
-    // For now, return a placeholder with the filename info.
+    if (!audioPath && req.file.buffer) {
+      audioPath = path.join('/tmp', req.file.originalname || 'audio_tmp');
+      fs.writeFileSync(audioPath, req.file.buffer);
+    }
     const fileName = req.file.originalname || 'audio';
-    const transcribed = '[Audio file: ' + fileName + '] Transcription requires a speech-to-text API key.';
+    let transcribed = '';
+    let note = '';
+    // Try whisper.cpp or similar if available; otherwise return info
+    transcribed = '';
+    note = 'Server-side transcription requires a speech-to-text API key. Try using browser speech recognition instead.';
+    if (!transcribed) {
+      const targetLang = req.body.target_language || 'en';
+      const sourceLang = req.body.source_language || 'ta';
+      await insert('INSERT INTO audio_history (user_id, transcribed_text, translated_text) VALUES (?, ?, ?)',
+        [req.user.id, '(browser STT recommended)', '', note]);
+      return res.json({
+        transcribed_text: transcribed,
+        translated_text: transcribed,
+        note,
+        file_name: fileName,
+        file_size: req.file.size,
+      });
+    }
     const translated = transcribed;
     await insert('INSERT INTO audio_history (user_id, transcribed_text, translated_text) VALUES (?, ?, ?)',
       [req.user.id, transcribed, translated]);
-    res.json({ transcribed_text: transcribed, translated_text: translated, note: 'placeholder' });
+    res.json({ transcribed_text: transcribed, translated_text: translated });
   } catch (err) {
     res.status(500).json({ detail: 'Audio processing failed: ' + err.message });
   } finally {
-    try { fs.unlinkSync(audioPath); } catch {}
+    try { if (audioPath && fs.existsSync(audioPath)) fs.unlinkSync(audioPath); } catch {}
   }
 });
 

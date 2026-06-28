@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { summarize } from '../../services/translation';
-import { FiFileText, FiCopy } from 'react-icons/fi';
+import { FiFileText, FiCopy, FiCheck } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 export default function SummarizePage() {
@@ -10,6 +10,7 @@ export default function SummarizePage() {
   const [translateTo, setTranslateTo] = useState('');
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState('');
 
   const handleSummarize = async () => {
     if (!text.trim() || text.length < 50) {
@@ -22,6 +23,7 @@ export default function SummarizePage() {
       if (translateTo) payload.translate_to = translateTo;
       const res = await summarize(payload);
       setResult(res.data);
+      toast.success('Summary generated!');
     } catch (err) {
       toast.error('Summarization failed');
     } finally {
@@ -29,15 +31,30 @@ export default function SummarizePage() {
     }
   };
 
+  const copyText = (label: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(''), 2000);
+  };
+
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-white">AI Summarizer</h1>
-      <p className="text-gray-400">Summarize long documents, articles, and books</p>
+      <div className="animate-fade-in-up">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600 flex items-center justify-center text-white shadow-lg shadow-teal-500/20">
+            <FiFileText size={20} />
+          </div>
+          <div>
+            <h1 className="section-title">AI Summarizer</h1>
+            <p className="section-subtitle">Summarize long documents, articles, and books</p>
+          </div>
+        </div>
+      </div>
 
-      <div className="card space-y-4">
+      <div className="card-glass p-6 md:p-8 animate-fade-in-up space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-200 mb-1">Language</label>
+            <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>Language</label>
             <select className="input-field" value={language} onChange={(e) => setLanguage(e.target.value)}>
               <option value="en">English</option>
               <option value="ta">தமிழ்</option>
@@ -47,11 +64,11 @@ export default function SummarizePage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-200 mb-1">Max Sentences</label>
+            <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>Max Sentences</label>
             <input type="number" min={2} max={20} className="input-field" value={maxSentences} onChange={(e) => setMaxSentences(Number(e.target.value))} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-200 mb-1">Translate to (optional)</label>
+            <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>Translate to (optional)</label>
             <select className="input-field" value={translateTo} onChange={(e) => setTranslateTo(e.target.value)}>
               <option value="">No translation</option>
               <option value="ta">தமிழ்</option>
@@ -64,32 +81,46 @@ export default function SummarizePage() {
         </div>
 
         <div>
+          <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>Text to Summarize</label>
           <textarea className="input-field h-48 resize-none" placeholder="Paste your text here (min 50 characters)..." value={text} onChange={(e) => setText(e.target.value)} />
           <div className="flex justify-between mt-1">
-            <span className="text-xs text-gray-400">{text.length} characters</span>
+            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{text.length} characters</span>
           </div>
         </div>
 
-        <button onClick={handleSummarize} className="btn-primary flex items-center" disabled={loading || text.length < 50}>
-          <FiFileText className="mr-2" />
-          {loading ? 'Summarizing...' : 'Summarize'}
+        <button onClick={handleSummarize} className="btn-primary inline-flex items-center gap-2" disabled={loading || text.length < 50}>
+          {loading ? (
+            <><span className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin" /> Summarizing...</>
+          ) : (
+            <><FiFileText size={16} /> Summarize</>
+          )}
         </button>
 
         {result && (
-          <div className="space-y-4">
-            <div className="bg-tamil-500/10 rounded-lg p-4 border border-tamil-500/20">
-              <h3 className="font-semibold text-tamil-400 mb-2">Summary</h3>
-              <p className="text-gray-100">{result.original_summary}</p>
+          <div className="space-y-4 animate-fade-in">
+            <div className="glass p-5 rounded-xl border-l-4" style={{ borderLeftColor: 'var(--text-primary)' }}>
+              <h3 className="font-semibold mb-2 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                <span className="w-2 h-2 rounded-full bg-teal-400" /> Summary
+              </h3>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>{result.original_summary}</p>
+              <button onClick={() => copyText('summary', result.original_summary)} className="mt-2 text-xs flex items-center gap-1 hover:text-tamil-400 transition-colors" style={{ color: 'var(--text-secondary)' }}>
+                {copied === 'summary' ? <><FiCheck size={12} /> Copied</> : <><FiCopy size={12} /> Copy</>}
+              </button>
             </div>
             {result.translated_summary && (
-              <div className="bg-blue-500/10 rounded-lg p-4 border border-blue-500/20">
-                <h3 className="font-semibold text-blue-400 mb-2">Translated Summary ({result.translated_language})</h3>
-                <p className="text-gray-100">{result.translated_summary}</p>
+              <div className="glass p-5 rounded-xl border-l-4" style={{ borderLeftColor: 'var(--text-primary)' }}>
+                <h3 className="font-semibold mb-2 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                  <span className="w-2 h-2 rounded-full bg-tamil-400" /> Translated Summary ({result.translated_language})
+                </h3>
+                <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>{result.translated_summary}</p>
+                <button onClick={() => copyText('translated', result.translated_summary)} className="mt-2 text-xs flex items-center gap-1 hover:text-tamil-400 transition-colors" style={{ color: 'var(--text-secondary)' }}>
+                  {copied === 'translated' ? <><FiCheck size={12} /> Copied</> : <><FiCopy size={12} /> Copy</>}
+                </button>
               </div>
             )}
-            <div className="flex space-x-4 text-sm text-gray-400">
-              <span>Compression: {result.compression_ratio}%</span>
-              <span>Original sentences: {result.sentence_count}</span>
+            <div className="flex gap-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
+              <span className="glass px-3 py-1 rounded-lg">Compression: {result.compression_ratio}%</span>
+              <span className="glass px-3 py-1 rounded-lg">Original sentences: {result.sentence_count}</span>
             </div>
           </div>
         )}
