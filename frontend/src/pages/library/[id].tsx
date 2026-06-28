@@ -381,7 +381,7 @@ export default function BookDetail() {
                 </div>
               ) : (
                 <iframe
-                  src={`${API_URL}/api/books/${book.id}/preview`}
+                  src={absFileUrl}
                   className={`w-full h-full transition-opacity duration-500 ${iframeReady ? 'opacity-100' : 'opacity-0'}`}
                   title={book.title}
                   onLoad={() => setIframeReady(true)}

@@ -202,6 +202,9 @@ export default function Library() {
   };
 
   const absDownloadUrl = selectedBook ? `${API_URL}/api/books/${selectedBook.id}/download` : '';
+  const absFileUrl = selectedBook?.file_url
+    ? (selectedBook.file_url.startsWith('http') ? selectedBook.file_url : `${API_URL}${selectedBook.file_url}`)
+    : '';
 
   return selectedBook ? (
     <div className="space-y-8">
@@ -326,7 +329,7 @@ export default function Library() {
                   </div>
                 ) : (
                   <iframe
-                    src={`${API_URL}/api/books/${selectedBook.id}/preview`}
+                    src={absFileUrl}
                     className={`w-full h-full transition-opacity duration-500 ${iframeReady ? 'opacity-100' : 'opacity-0'}`}
                     title={selectedBook.title}
                     onLoad={() => setIframeReady(true)}
