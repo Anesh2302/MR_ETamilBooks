@@ -15,6 +15,9 @@ const rateLimit = require('express-rate-limit');
 const { body, validationResult, param, query: queryValidator } = require('express-validator');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
+const https = require('https');
+const { URL } = require('url');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
@@ -362,6 +365,46 @@ app.get('/api/books/:id/download', [
   }
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.send(book.content_text || book.description || 'Content not available');
+});
+
+// --- Book preview (proxies external PDFs to bypass CORS) ---
+app.get('/api/books/:id/preview', [
+  param('id').isInt(),
+], validate, async (req, res) => {
+  const book = await queryOne('SELECT * FROM books WHERE id = ?', [Number(req.params.id)]);
+  if (!book) return res.status(404).json({ detail: 'Book not found' });
+  if (book.content_text) {
+    return res.json({ type: 'text', content: book.content_text });
+  }
+  if (book.file_url) {
+    const fileUrl = book.file_url.startsWith('http') ? book.file_url : `${req.protocol}://${req.get('host')}${book.file_url}`;
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    try {
+      const parsed = new URL(fileUrl);
+      const mod = parsed.protocol === 'https:' ? https : http;
+      await new Promise((resolve, reject) => {
+        mod.get(fileUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (proxyRes) => {
+          if (proxyRes.statusCode >= 400) {
+            reject(new Error(`Upstream ${proxyRes.statusCode}`));
+            return;
+          }
+          if ([301, 302, 303, 307, 308].includes(proxyRes.statusCode) && proxyRes.headers.location) {
+            res.redirect(proxyRes.headers.location);
+            resolve();
+            return;
+          }
+          res.setHeader('Content-Type', proxyRes.headers['content-type'] || 'application/octet-stream');
+          proxyRes.pipe(res);
+          proxyRes.on('end', resolve);
+        }).on('error', reject);
+      });
+    } catch {
+      res.redirect(fileUrl);
+    }
+    return;
+  }
+  res.status(404).json({ detail: 'No content available for preview' });
 });
 
 // --- Translate ---

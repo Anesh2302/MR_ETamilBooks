@@ -1,7 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 
 export default function Custom404() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const path = window.location.pathname;
+    const match = path.match(/\/library\/(\d+)/);
+    if (match) {
+      router.replace(`/library/${match[1]}`);
+    }
+  }, [router]);
+
   return (
     <div className="min-h-screen flex items-center justify-center auth-gradient px-4">
       <div className="text-center animate-fade-in-up">
