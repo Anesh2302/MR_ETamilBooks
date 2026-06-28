@@ -557,7 +557,7 @@ const LANG_VOICES = { ta: 'ta', en: 'en', hi: 'hi', ml: 'ml', te: 'te', kn: 'kn'
 
 app.get('/api/tts/proxy', async (req, res) => {
   const text = req.query.text || '';
-  const lang = LANG_VOICES[req.query.lang as string] || 'ta';
+  const lang = LANG_VOICES[req.query.lang] || 'ta';
   if (!text) return res.status(400).json({ detail: 'text required' });
   try {
     const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text.slice(0, 200))}&tl=${lang}&client=tw-ob&ttsspeed=1`;
@@ -577,7 +577,7 @@ app.post('/api/tts/synthesize', auth, [
   body('language').optional().isLength({ min: 2, max: 10 }),
 ], validate, async (req, res) => {
   const { text, language } = req.body;
-  const lang = LANG_VOICES[language as string] || 'ta';
+  const lang = LANG_VOICES[language] || 'ta';
   const fileUrl = `/api/tts/proxy?text=${encodeURIComponent(text.slice(0, 200))}&lang=${lang}`;
   await insert('INSERT INTO tts_history (user_id, text, language, audio_url) VALUES (?, ?, ?, ?)',
     [req.user.id, text, language, fileUrl]);
