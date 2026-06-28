@@ -333,6 +333,10 @@ body {
   .input-field:focus {
     @apply ring-2 ring-tamil-500/50 border-tamil-500;
   }
+  .input-field option {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+  }
   .input-field-dark {
     @apply w-full px-4 py-3 rounded-xl outline-none transition-all duration-200 backdrop-blur-xl;
     background: rgba(255, 255, 255, 0.06);
@@ -341,6 +345,10 @@ body {
   }
   .input-field-dark:focus {
     @apply ring-2 ring-tamil-500 border-tamil-500;
+  }
+  .input-field-dark option {
+    background: var(--bg-primary);
+    color: var(--text-primary);
   }
   .section-title {
     @apply text-2xl font-bold mb-2;

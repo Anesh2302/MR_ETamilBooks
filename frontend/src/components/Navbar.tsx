@@ -25,11 +25,15 @@ export default function Navbar() {
   const lastScrollY = useRef(0);
   const router = useRouter();
   const profileRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
         setProfileOpen(false);
+      }
+      if (navRef.current && !navRef.current.contains(e.target as Node)) {
+        setMobileOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClick);
@@ -67,7 +71,7 @@ export default function Navbar() {
   }
 
   return (
-    <nav className={`sticky top-0 z-50 glass-nav transition-transform duration-300 ${hidden ? '-translate-y-full' : 'translate-y-0'}`}>
+    <nav ref={navRef} className={`sticky top-0 z-50 glass-nav transition-transform duration-300 ${hidden ? '-translate-y-full' : 'translate-y-0'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
           <Link href="/" className="flex items-center gap-2">
