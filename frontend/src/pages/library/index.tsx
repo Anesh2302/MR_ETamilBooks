@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { useAuth } from '../../contexts/AuthContext';
-import { getCategories, getBooks, getProgress, getBookmarks, createBookmark, deleteBookmark } from '../../services/books';
+import { getCategories, getBooks, getBook, createBookmark, deleteBookmark, getProgress, getBookmarks } from '../../services/books';
 import { API_URL } from '../../services/api';
-import { FiBook, FiSearch, FiDownload, FiEye, FiChevronRight, FiBookmark, FiClock, FiX, FiChevronLeft, FiChevronsLeft, FiChevronsRight } from 'react-icons/fi';
+import { FiBook, FiSearch, FiDownload, FiEye, FiChevronRight, FiBookmark, FiClock, FiX, FiChevronLeft, FiChevronsLeft, FiChevronsRight, FiArrowLeft, FiExternalLink, FiBookOpen, FiFileText } from 'react-icons/fi';
+import Head from 'next/head';
 
 const PER_PAGE = 24;
 const SKELETON_COUNT = 12;
@@ -30,6 +32,7 @@ function SkeletonCard() {
 }
 
 export default function Library() {
+  const router = useRouter();
   const { isAuthenticated } = useAuth();
   const [categories, setCategories] = useState<any[]>([]);
   const [books, setBooks] = useState<any[]>([]);
@@ -47,6 +50,11 @@ export default function Library() {
   const [showSearches, setShowSearches] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout>();
+  const [selectedBook, setSelectedBook] = useState<any>(null);
+  const [bookLoading, setBookLoading] = useState(false);
+  const [bookError, setBookError] = useState('');
+  const [previewError, setPreviewError] = useState(false);
+  const [iframeReady, setIframeReady] = useState(false);
 
   const fetchBooks = useCallback(async (p: number) => {
     setLoading(true);
@@ -67,6 +75,24 @@ export default function Library() {
       setLoading(false);
     }
   }, [selectedCat, debouncedSearch, language]);
+
+  useEffect(() => {
+    if (router.query.book) {
+      const id = Number(router.query.book);
+      if (id) {
+        setBookLoading(true);
+        setBookError('');
+        setPreviewError(false);
+        setIframeReady(false);
+        getBook(id)
+          .then(res => setSelectedBook(res.data))
+          .catch(() => setBookError('Book not found'))
+          .finally(() => setBookLoading(false));
+      }
+    } else {
+      setSelectedBook(null);
+    }
+  }, [router.query.book]);
 
   useEffect(() => {
     getCategories().then((res) => setCategories(res.data)).catch(() => {});
@@ -175,7 +201,145 @@ export default function Library() {
     );
   };
 
-  return (
+  const absDownloadUrl = selectedBook ? `${API_URL}/api/books/${selectedBook.id}/download` : '';
+
+  return selectedBook ? (
+    <div className="space-y-8">
+      <button onClick={() => router.push('/library/')} className="inline-flex items-center gap-1.5 text-tamil-400 hover:text-tamil-300 transition-all hover:gap-2 animate-fade-in">
+        <FiArrowLeft size={16} /> Back to Library
+      </button>
+      {bookLoading ? (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 animate-fade-in">
+          <div className="relative"><div className="w-16 h-16 rounded-full border-2 border-white/10" /><div className="absolute inset-0 w-16 h-16 rounded-full border-t-2 border-tamil-500 animate-spin" /></div>
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading book...</p>
+        </div>
+      ) : bookError ? (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
+          <div className="text-7xl mb-6 animate-float">📚</div>
+          <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Book Not Found</h1>
+          <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>{bookError}</p>
+        </div>
+      ) : selectedBook ? (
+        <>
+          <div className="card-glass p-6 md:p-8 animate-fade-in-up relative overflow-hidden">
+            <div className="flex flex-col md:flex-row gap-8">
+              <div className="flex-shrink-0">
+                <div className="w-48 h-72 bg-gradient-to-br from-tamil-900/50 to-orange-900/30 rounded-xl flex items-center justify-center shadow-lg border border-white/10 overflow-hidden group">
+                  {selectedBook.cover_url ? (
+                    <img src={selectedBook.cover_url} alt={selectedBook.title} className="w-full h-full object-cover rounded-xl transition-transform duration-500 group-hover:scale-105" />
+                  ) : (
+                    <span className="text-6xl animate-pulse-slow">📖</span>
+                  )}
+                </div>
+                <div className="mt-4 flex flex-col gap-2">
+                  {(selectedBook.file_url || selectedBook.content_text) && (
+                    <a href={`${API_URL}/api/books/${selectedBook.id}/preview`} target="_blank" rel="noopener noreferrer"
+                      className="btn-primary text-sm w-full text-center inline-flex items-center justify-center gap-2">
+                      <FiBookOpen size={14} /> Read Online
+                    </a>
+                  )}
+                  <a href={absDownloadUrl} className="btn-outline text-sm w-full text-center inline-flex items-center justify-center gap-2">
+                    <FiDownload size={14} /> Download
+                  </a>
+                  {isAuthenticated && (
+                    <button onClick={(e) => toggleBookmark(e, selectedBook.id)} className={`flex items-center justify-center gap-2 text-sm w-full py-2.5 px-4 rounded-xl border transition-all duration-200 ${
+                      bookmarks.includes(selectedBook.id) ? 'bg-tamil-500/15 border-tamil-500/30 text-tamil-400' : 'border-white/10 hover:bg-white/5 hover:border-white/20'
+                    }`} style={{ color: bookmarks.includes(selectedBook.id) ? undefined : 'var(--text-secondary)' }}>
+                      <FiBookmark size={14} className={bookmarks.includes(selectedBook.id) ? 'fill-tamil-400' : ''} />
+                      {bookmarks.includes(selectedBook.id) ? 'Bookmarked' : 'Bookmark'}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start gap-3 mb-3 flex-wrap">
+                  <h1 className="text-3xl font-bold animate-slide-in-left" style={{ color: 'var(--text-primary)' }}>{selectedBook.title_ta || selectedBook.title}</h1>
+                  <span className={`px-2.5 py-0.5 rounded text-xs font-semibold animate-scale-in ${selectedBook.language === 'ta' ? 'bg-orange-500/15 text-orange-400 border border-orange-500/20' : 'bg-blue-500/15 text-blue-400 border border-blue-500/20'}`}>
+                    {selectedBook.language === 'ta' ? 'தமிழ்' : 'EN'}
+                  </span>
+                </div>
+                {selectedBook.title_ta && selectedBook.title && (
+                  <p className="text-lg mb-4 animate-slide-in-right" style={{ color: 'var(--text-secondary)' }}>{selectedBook.title}</p>
+                )}
+                <div className="flex items-center gap-4 mb-4 flex-wrap">
+                  <div className="animate-fade-in">
+                    <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Author:</span>
+                    <span className="text-sm ml-1" style={{ color: 'var(--text-secondary)' }}>{selectedBook.author_ta || selectedBook.author || 'Unknown'}</span>
+                  </div>
+                  {selectedBook.file_type && (
+                    <span className="text-sm px-2 py-0.5 rounded bg-white/5 border border-white/10" style={{ color: 'var(--text-secondary)' }}>
+                      {selectedBook.file_type.toUpperCase()}
+                    </span>
+                  )}
+                </div>
+                {selectedBook.description && (
+                  <div className="mt-6 animate-fade-in">
+                    <h3 className="text-lg font-semibold mb-2 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                      <FiFileText size={16} className="text-tamil-400" /> Description
+                    </h3>
+                    <div className="glass p-4 rounded-xl">
+                      {selectedBook.description_ta ? (
+                        <div className="space-y-2">
+                          <p className="leading-relaxed" style={{ color: 'var(--text-primary)' }}>{selectedBook.description_ta}</p>
+                          <p className="text-sm leading-relaxed opacity-70" style={{ color: 'var(--text-secondary)' }}>{selectedBook.description}</p>
+                        </div>
+                      ) : (
+                        <p className="leading-relaxed" style={{ color: 'var(--text-primary)' }}>{selectedBook.description}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          {(selectedBook.file_url || selectedBook.content_text) && (
+            <div className="card-glass p-6 animate-fade-in-up">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                  <FiBookOpen size={16} className="text-tamil-400" />
+                  <span className="font-medium" style={{ color: 'var(--text-primary)' }}>Preview</span>
+                </div>
+                <a href={selectedBook.file_url} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg text-tamil-400 hover:text-tamil-300 hover:bg-tamil-500/10 transition-all border border-transparent hover:border-tamil-500/20">
+                  <FiExternalLink size={14} /> Open original
+                </a>
+              </div>
+              <div className="w-full h-[80vh] rounded-xl overflow-hidden relative" style={{ border: '1px solid var(--border-color)' }}>
+                {!iframeReady && !previewError && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3" style={{ background: 'var(--bg-primary)' }}>
+                    <div className="relative"><div className="w-10 h-10 rounded-full border-2 border-white/10" /><div className="absolute inset-0 w-10 h-10 rounded-full border-t-2 border-tamil-500 animate-spin" /></div>
+                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading book preview...</span>
+                  </div>
+                )}
+                {previewError ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-4" style={{ background: 'var(--bg-primary)' }}>
+                    <div className="text-5xl">📖</div>
+                    <p className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>Preview unavailable</p>
+                    <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>This book cannot be previewed inline.</p>
+                    <a href={absDownloadUrl} className="btn-primary inline-flex items-center gap-2"><FiDownload size={14} /> Download to view</a>
+                  </div>
+                ) : selectedBook.content_text ? (
+                  <div className="p-8 overflow-y-auto h-full" style={{ background: 'var(--bg-primary)' }}>
+                    <div className="max-w-3xl mx-auto whitespace-pre-wrap leading-relaxed text-lg" style={{ color: 'var(--text-primary)' }}>
+                      {selectedBook.content_text}
+                    </div>
+                  </div>
+                ) : (
+                  <iframe
+                    src={`${API_URL}/api/books/${selectedBook.id}/preview`}
+                    className={`w-full h-full transition-opacity duration-500 ${iframeReady ? 'opacity-100' : 'opacity-0'}`}
+                    title={selectedBook.title}
+                    onLoad={() => setIframeReady(true)}
+                    onError={() => setPreviewError(true)}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      ) : null}
+    </div>
+  ) : (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 animate-fade-in-up">
         <div>
@@ -266,7 +430,7 @@ export default function Library() {
             {books.map((book: any, i: number) => {
               const prog = progressMap[book.id];
               return (
-              <Link key={book.id} href={`/library/${book.id}`}
+              <Link key={book.id} href={`/library/?book=${book.id}`}
                 className="card hover:shadow-lg transition-all duration-300 group block animate-fade-in-up relative"
                 style={{ animationDelay: `${i * 0.03}s` }}>
                 <div className="w-full h-48 bg-gradient-to-br from-tamil-900/30 to-orange-900/20 rounded-lg mb-4 flex items-center justify-center overflow-hidden relative">
