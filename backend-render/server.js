@@ -189,7 +189,7 @@ app.post('/api/auth/login', authLimiter, [
 app.post('/api/auth/register', authLimiter, [
   body('username').trim().isLength({ min: 3, max: 30 }).matches(/^[a-zA-Z0-9_]+$/).withMessage('Username must be 3-30 alphanumeric characters'),
   body('email').trim().isEmail().normalizeEmail().withMessage('Valid email required'),
-  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters').matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).withMessage('Password must contain uppercase, lowercase, and a number'),
   body('full_name').optional().trim().isLength({ max: 100 }).withMessage('Full name too long'),
 ], validate, async (req, res) => {
   const { username, email, password, full_name } = req.body;
@@ -921,6 +921,15 @@ app.delete('/api/admin/users/:id', auth, adminOnly, [
   param('id').isInt(),
 ], validate, async (req, res) => {
   await run('DELETE FROM users WHERE id = ? AND is_superuser = 0', [Number(req.params.id)]);
+  res.json({ success: true });
+});
+
+app.post('/api/admin/users/:id/reset-password', auth, adminOnly, [
+  param('id').isInt(),
+  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters').matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).withMessage('Password must contain uppercase, lowercase, and a number'),
+], validate, async (req, res) => {
+  const hash = bcrypt.hashSync(req.body.password, 10);
+  await run('UPDATE users SET password = ? WHERE id = ?', [hash, Number(req.params.id)]);
   res.json({ success: true });
 });
 
