@@ -483,32 +483,7 @@ app.post('/api/translate/text', auth, [
   try {
     let translated = null;
     let method = 'none';
-    // Try local translation first (no network dependency)
-    const local = localTranslate(text, tl, source_language);
-    if (local) { translated = local; method = 'local'; }
-    // Try MyMemory API
-    if (!translated) {
-      try {
-        const q = encodeURIComponent(text.slice(0, 500));
-        const sl = source_language || (/[\u0B80-\u0BFF]/.test(text) ? 'ta' : 'en');
-        const pair = sl + '|' + tl;
-        const url = 'https://api.mymemory.translated.net/get?q=' + q + '&langpair=' + pair + '&de=simonpetercys@gmail.com';
-        const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), 10000);
-        const r = await fetch(url, { signal: controller.signal });
-        clearTimeout(tid);
-        const j = await r.json();
-        const myTxt = j.responseData && j.responseData.translatedText;
-        const myMatch = j.responseData && j.responseData.match;
-        if (myTxt && myTxt !== text && (myMatch || 0) >= 0.5 && !myTxt.includes('INVALID') && !myTxt.includes('PLEASE SELECT') && !myTxt.includes('SELECT TWO')) {
-          translated = myTxt;
-          method = 'mymemory';
-        }
-      } catch (e) {
-        method = 'mymemory_err';
-      }
-    }
-    // Try Google Translate as fallback
+    // Try Google Translate first (most reliable)
     if (!translated) {
       try {
         const q = encodeURIComponent(text.slice(0, 500));
@@ -525,7 +500,33 @@ app.post('/api/translate/text', auth, [
           method = 'google';
         }
       } catch (e) {
-        if (!method.startsWith('error:')) method = 'error:google';
+        method = 'google_err';
+      }
+    }
+    // Try local translation (no network dependency)
+    if (!translated) {
+      const local = localTranslate(text, tl, source_language);
+      if (local) { translated = local; method = 'local'; }
+    }
+    // Try MyMemory API as last resort
+    if (!translated) {
+      try {
+        const q = encodeURIComponent(text.slice(0, 500));
+        const sl = source_language || (/[\u0B80-\u0BFF]/.test(text) ? 'ta' : 'en');
+        const pair = sl + '|' + tl;
+        const url = 'https://api.mymemory.translated.net/get?q=' + q + '&langpair=' + pair + '&de=simonpetercys@gmail.com';
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 10000);
+        const r = await fetch(url, { signal: controller.signal });
+        clearTimeout(tid);
+        const j = await r.json();
+        const myTxt = j.responseData && j.responseData.translatedText;
+        if (myTxt && myTxt !== text && !myTxt.includes('INVALID') && !myTxt.includes('PLEASE SELECT') && !myTxt.includes('SELECT TWO')) {
+          translated = myTxt;
+          method = 'mymemory';
+        }
+      } catch (e) {
+        method = 'mymemory_err';
       }
     }
     // Final fallback
