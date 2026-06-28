@@ -2,6 +2,7 @@ const { createClient } = require('@libsql/client/http');
 const RAW_URL = process.env.TURSO_DB_URL || '';
 const RAW_TOKEN = process.env.TURSO_DB_TOKEN || '';
 const TURSO_DB_URL = RAW_URL.charCodeAt(0) === 0xFEFF ? RAW_URL.slice(1) : RAW_URL;
+const TURSO_DB_TOKEN = RAW_TOKEN.charCodeAt(0) === 0xFEFF ? RAW_TOKEN.slice(1) : RAW_TOKEN;
 let client;
 let initialized = false;
 let initPromise = null;
