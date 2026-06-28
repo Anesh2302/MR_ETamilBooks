@@ -233,7 +233,7 @@ export default function Library() {
                 </div>
                 <div className="mt-4 flex flex-col gap-2">
                   {(selectedBook.file_url || selectedBook.content_text) && (
-                    <a href={`${API_URL}/api/books/${selectedBook.id}/preview`} target="_blank" rel="noopener noreferrer"
+                    <a href="#preview-section"
                       className="btn-primary text-sm w-full text-center inline-flex items-center justify-center gap-2">
                       <FiBookOpen size={14} /> Read Online
                     </a>
@@ -293,7 +293,7 @@ export default function Library() {
             </div>
           </div>
           {(selectedBook.file_url || selectedBook.content_text) && (
-            <div className="card-glass p-6 animate-fade-in-up">
+            <div id="preview-section" className="card-glass p-6 animate-fade-in-up">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <div className="flex items-center gap-2">
                   <FiBookOpen size={16} className="text-tamil-400" />

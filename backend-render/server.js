@@ -457,33 +457,18 @@ const LOCAL_TRANSLATIONS = {
 };
 
 function localTranslate(text, targetLang, sourceLang) {
+    if (text.split(/\s+/).length > 1) return null;
     if (targetLang === 'ta' && sourceLang !== 'ta') {
-        // English→Tamil
         const lower = text.toLowerCase().trim();
         if (LOCAL_TRANSLATIONS.ta[lower]) return LOCAL_TRANSLATIONS.ta[lower];
-        for (const [en, ta] of Object.entries(LOCAL_TRANSLATIONS.ta)) {
-            if (lower.startsWith(en) || lower.includes(en)) {
-                return text.replace(new RegExp(en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ta);
-            }
-        }
         return null;
     }
     if (targetLang === 'en') {
-        // Tamil→English (direct lookup with Unicode normalization)
         const trimmed = text.trim();
         if (!trimmed) return null;
-        // Try exact match
         if (LOCAL_TRANSLATIONS.en[trimmed]) return LOCAL_TRANSLATIONS.en[trimmed];
-        // Try with NFC normalization
         const nfc = trimmed.normalize('NFC');
         if (nfc !== trimmed && LOCAL_TRANSLATIONS.en[nfc]) return LOCAL_TRANSLATIONS.en[nfc];
-        // Try partial match for longer texts containing known words
-        for (const [ta, en] of Object.entries(LOCAL_TRANSLATIONS.en)) {
-            if (trimmed.includes(ta) || nfc.includes(ta)) {
-                const esc = ta.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                return trimmed.replace(new RegExp(esc, 'g'), en);
-            }
-        }
     }
     return null;
 }
@@ -509,7 +494,7 @@ app.post('/api/translate/text', auth, [
         const pair = sl + '|' + tl;
         const url = 'https://api.mymemory.translated.net/get?q=' + q + '&langpair=' + pair + '&de=simonpetercys@gmail.com';
         const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), 5000);
+        const tid = setTimeout(() => controller.abort(), 10000);
         const r = await fetch(url, { signal: controller.signal });
         clearTimeout(tid);
         const j = await r.json();
