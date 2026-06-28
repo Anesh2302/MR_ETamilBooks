@@ -499,7 +499,8 @@ app.post('/api/translate/text', auth, [
         clearTimeout(tid);
         const j = await r.json();
         const myTxt = j.responseData && j.responseData.translatedText;
-        if (myTxt && myTxt !== text && !myTxt.includes('INVALID') && !myTxt.includes('PLEASE SELECT') && !myTxt.includes('SELECT TWO')) {
+        const myMatch = j.responseData && j.responseData.match;
+        if (myTxt && myTxt !== text && (myMatch || 0) >= 0.5 && !myTxt.includes('INVALID') && !myTxt.includes('PLEASE SELECT') && !myTxt.includes('SELECT TWO')) {
           translated = myTxt;
           method = 'mymemory';
         }
