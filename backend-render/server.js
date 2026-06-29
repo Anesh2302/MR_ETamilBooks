@@ -609,6 +609,53 @@ app.post('/api/translate/document', auth, upload.single('file'), handleMulterErr
   }
 });
 
+app.post('/api/translate/document/download', auth, upload.single('file'), handleMulterError, async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ detail: 'No file uploaded' });
+    const buf = req.file.buffer;
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    let extracted = '';
+    if (ext === '.txt') {
+      extracted = buf.toString('utf-8');
+    } else if (ext === '.pdf') {
+      const pdfParse = require('pdf-parse');
+      const data = await pdfParse(buf);
+      extracted = data.text || '';
+    } else if (ext === '.docx') {
+      const mammoth = require('mammoth');
+      const result = await mammoth.extractRawText({ buffer: buf });
+      extracted = result.value || '';
+    } else if (ext === '.doc') {
+      extracted = buf.toString('utf-8').replace(/[^\x20-\x7E\n\r\t]/g, ' ').replace(/\s+/g, ' ').trim();
+    } else {
+      extracted = buf.toString('utf-8');
+    }
+    extracted = extracted.trim().slice(0, 10000);
+    if (!extracted) return res.status(400).json({ detail: 'Could not extract text from file' });
+    const source_language = req.body.source_language || '';
+    const target_language = req.body.target_language || 'en';
+    const sl = source_language || (/[\u0B80-\u0BFF]/.test(extracted) ? 'ta' : 'en');
+    const translated = await translateChunks(extracted, sl, target_language);
+    const { Document, Packer, Paragraph, TextRun } = require('docx');
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: translated.split('\n').filter(Boolean).map(p => new Paragraph({
+          spacing: { after: 200 },
+          children: [new TextRun({ text: p, size: 24, font: 'Calibri' })]
+        }))
+      }]
+    });
+    const buffer = await Packer.toBuffer(doc);
+    const baseName = path.basename(req.file.originalname, ext);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + baseName + '_translated.docx"');
+    res.send(buffer);
+  } catch (e) {
+    res.status(500).json({ detail: 'Document download failed: ' + e.message });
+  }
+});
+
 // --- TTS ---
 const LANG_VOICES = { ta: 'ta', en: 'en', hi: 'hi', ml: 'ml', te: 'te', kn: 'kn', bn: 'bn', fr: 'fr', de: 'de', es: 'es', ja: 'ja', zh: 'zh', ar: 'ar', ru: 'ru', pt: 'pt' };
 
