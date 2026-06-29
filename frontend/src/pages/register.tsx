@@ -11,6 +11,7 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [passwordWarn, setPasswordWarn] = useState('');
   const { login, isAuthenticated, authLoading } = useAuth();
   const router = useRouter();
 
@@ -26,7 +27,16 @@ export default function Register() {
     );
   }
 
-  const update = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }));
+  const update = (field: string, value: string) => {
+    setForm(prev => ({ ...prev, [field]: value }));
+    if (field === 'password') {
+      if (value.length > 0 && value.length < 8) setPasswordWarn('At least 8 characters');
+      else if (!/[A-Z]/.test(value)) setPasswordWarn('Need an uppercase letter');
+      else if (!/[a-z]/.test(value)) setPasswordWarn('Need a lowercase letter');
+      else if (!/[0-9]/.test(value)) setPasswordWarn('Need a number');
+      else setPasswordWarn('');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,8 +44,12 @@ export default function Register() {
       toast.error('Passwords do not match');
       return;
     }
-    if (form.password.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    if (form.password.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+    if (!/[A-Z]/.test(form.password) || !/[a-z]/.test(form.password) || !/[0-9]/.test(form.password)) {
+      toast.error('Password must contain uppercase, lowercase, and a number');
       return;
     }
     setLoading(true);
@@ -85,10 +99,11 @@ export default function Register() {
               <label className="block text-sm font-medium text-gray-400 mb-1.5">Password *</label>
               <div className="relative">
                 <input type={showPassword ? 'text' : 'password'} className="w-full h-10 px-3.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-tamil-500/40 focus:border-tamil-500/50 transition-all pr-10" value={form.password} onChange={(e) => update('password', e.target.value)} placeholder="Min 6 characters" required />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors">
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors">
                   {showPassword ? <FiEyeOff size={16} /> : <FiEye size={16} />}
                 </button>
               </div>
+              {passwordWarn && <p className="text-xs text-orange-400 mt-1">{passwordWarn}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-1.5">Confirm Password *</label>

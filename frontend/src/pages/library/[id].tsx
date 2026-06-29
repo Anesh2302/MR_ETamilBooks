@@ -27,14 +27,11 @@ export default function BookDetail() {
   const [viewMode, setViewMode] = useState<ViewMode>('side-by-side');
   const [translations, setTranslations] = useState<Record<number, string>>({});
   const [translating, setTranslating] = useState(false);
-  const [iframeReady, setIframeReady] = useState(false);
-  const [previewError, setPreviewError] = useState(false);
   const readerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    setIframeReady(false);
     getBook(Number(id))
       .then(res => {
         setBook(res.data);
@@ -359,35 +356,12 @@ export default function BookDetail() {
                 </a>
               </div>
             </div>
-            <div className="w-full h-[80vh] rounded-xl overflow-hidden relative" style={{ border: '1px solid var(--border-color)' }}>
-              {!iframeReady && !previewError && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3" style={{ background: 'var(--bg-primary)' }}>
-                  <div className="relative">
-                    <div className="w-10 h-10 rounded-full border-2 border-white/10" />
-                    <div className="absolute inset-0 w-10 h-10 rounded-full border-t-2 border-tamil-500 animate-spin" />
-                  </div>
-                  <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading book preview...</span>
-                </div>
-              )}
-              {previewError ? (
-                <div className="flex flex-col items-center justify-center h-full gap-4" style={{ background: 'var(--bg-primary)' }}>
-                  <div className="text-5xl">📖</div>
-                  <p className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>Preview unavailable</p>
-                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>This book cannot be previewed inline.</p>
-                  <a href={absDownloadUrl}
-                    className="btn-primary inline-flex items-center gap-2">
-                    <FiDownload size={14} /> Download to view
-                  </a>
-                </div>
-              ) : (
-                <iframe
-                  src={absFileUrl}
-                  className={`w-full h-full transition-opacity duration-500 ${iframeReady ? 'opacity-100' : 'opacity-0'}`}
-                  title={book.title}
-                  onLoad={() => setIframeReady(true)}
-                  onError={() => setPreviewError(true)}
-                />
-              )}
+            <div className="w-full h-[80vh] rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-color)' }}>
+              <iframe
+                src={absFileUrl}
+                className="w-full h-full"
+                title={book.title}
+              />
             </div>
           </div>
         )}

@@ -5,6 +5,7 @@ export const detectLanguage = (text: string) => api.post('/api/translate/detect'
 export const translateText = (data: { text: string; source_language: string; target_language: string }) =>
   api.post('/api/translate/text', data);
 export const translateDocument = (formData: FormData) => api.post('/api/translate/document', formData);
+export const downloadTranslatedDocument = (formData: FormData) => api.post('/api/translate/document/download', formData, { responseType: 'blob' });
 export const getTranslationHistory = () => api.get('/api/translate/history');
 export const getDocumentTranslations = () => api.get('/api/translate/documents');
 export const downloadDocument = (id: number) => api.get(`/api/translate/documents/${id}/download`, { responseType: 'blob' });

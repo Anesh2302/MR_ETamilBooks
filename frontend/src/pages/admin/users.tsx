@@ -4,13 +4,16 @@ import Link from 'next/link';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
-import { FiUsers, FiArrowLeft, FiShield, FiShieldOff, FiTrash2, FiCheck, FiX } from 'react-icons/fi';
+import { FiUsers, FiArrowLeft, FiShield, FiShieldOff, FiTrash2, FiCheck, FiX, FiKey } from 'react-icons/fi';
 
 export default function AdminUsers() {
   const { isAuthenticated, isAdmin, authLoading } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [resetUser, setResetUser] = useState<any>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -34,6 +37,24 @@ export default function AdminUsers() {
 
   const toggleActive = async (id: number) => {
     try { await api.put(`/api/admin/users/${id}/toggle-active`); toast.success('Updated'); fetchUsers(); } catch (e: any) { toast.error(e.response?.data?.detail || 'Failed'); }
+  };
+
+  const resetUserPassword = async () => {
+    if (!newPassword || newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      toast.error('Password must be 8+ chars with uppercase, lowercase, and a number');
+      return;
+    }
+    setResetting(true);
+    try {
+      await api.post(`/api/admin/users/${resetUser.id}/reset-password`, { password: newPassword });
+      toast.success('Password reset successfully');
+      setResetUser(null);
+      setNewPassword('');
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'Failed to reset password');
+    } finally {
+      setResetting(false);
+    }
   };
 
   const deleteUser = async (id: number, username: string) => {
@@ -96,6 +117,9 @@ export default function AdminUsers() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => setResetUser(u)} className="p-1.5 text-gray-300 hover:text-yellow-400 hover:bg-yellow-500/10 rounded-lg transition-colors" title="Reset password">
+                          <FiKey size={15} />
+                        </button>
                         <button onClick={() => toggleAdmin(u.id)} className="p-1.5 text-gray-300 hover:text-tamil-400 hover:bg-tamil-500/10 rounded-lg transition-colors" title="Toggle admin">
                           {u.is_superuser ? <FiShieldOff size={15} /> : <FiShield size={15} />}
                         </button>
@@ -114,6 +138,24 @@ export default function AdminUsers() {
           </div>
         )}
       </div>
+
+      {resetUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => { setResetUser(null); setNewPassword(''); }}>
+          <div className="card-glass p-6 max-w-sm w-full animate-fade-in-up" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-white mb-1">Reset Password</h2>
+            <p className="text-sm text-gray-400 mb-4">Setting new password for <span className="text-white font-medium">{resetUser.username}</span></p>
+            <input type="text" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+              placeholder="New password (8+ chars, A-Z, a-z, 0-9)"
+              className="w-full h-10 px-3.5 bg-white/[0.04] border border-white/[0.08] rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-tamil-500/40 focus:border-tamil-500/50 transition-all mb-4" />
+            <div className="flex gap-2">
+              <button onClick={() => { setResetUser(null); setNewPassword(''); }} className="flex-1 btn-outline text-sm h-10">Cancel</button>
+              <button onClick={resetUserPassword} disabled={resetting} className="flex-1 btn-primary text-sm h-10">
+                {resetting ? 'Resetting...' : 'Reset Password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

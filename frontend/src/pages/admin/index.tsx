@@ -30,7 +30,7 @@ export default function AdminDashboard() {
   const handleScrape = async () => {
     setScraping(true);
     try {
-      await api.post('/api/admin/scrape-freetamilebooks');
+      await api.post('/api/admin/scrape-links');
       toast.success('Scraping started! Check server logs for progress.');
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Failed to start scraping');
@@ -42,7 +42,7 @@ export default function AdminDashboard() {
   const cards = [
     { icon: FiBarChart2, label: 'Dashboard', desc: 'Overview & statistics', href: '/admin', color: 'from-indigo-500 to-indigo-600' },
     { icon: FiUpload, label: 'Upload Book', desc: 'Add new books to library', href: '/admin/upload', color: 'from-tamil-500 to-orange-500' },
-    { icon: FiGlobe, label: 'Scrape Books', desc: 'Scrape freetamilebooks.com', action: handleScrape, loading: scraping, color: 'from-green-500 to-emerald-600' },
+    { icon: FiGlobe, label: 'Scrape Books', desc: 'Import books from external sources', action: handleScrape, loading: scraping, color: 'from-green-500 to-emerald-600' },
     { icon: FiUsers, label: 'Manage Users', desc: 'View and manage users', href: '/admin/users', color: 'from-blue-500 to-cyan-500' },
   ];
 

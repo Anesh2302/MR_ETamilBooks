@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useAuth } from '../contexts/AuthContext';
 import { login as loginApi } from '../services/auth';
 import { toast } from 'react-toastify';
-import { FiEye, FiEyeOff, FiArrowRight, FiBook } from 'react-icons/fi';
+import { FiEye, FiEyeOff, FiArrowRight, FiBook, FiX, FiMail, FiPhone } from 'react-icons/fi';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -12,6 +12,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
   const { login, isAuthenticated, authLoading } = useAuth();
   const router = useRouter();
 
@@ -92,7 +93,7 @@ export default function Login() {
                 />
                 <span className="text-sm text-gray-500">Remember me</span>
               </label>
-              <button type="button" className="text-sm text-tamil-500 hover:text-tamil-400 transition-colors">Forgot?</button>
+              <button type="button" onClick={() => setShowForgot(true)} className="text-sm text-tamil-500 hover:text-tamil-400 transition-colors">Forgot?</button>
             </div>
             <button type="submit" className="btn-primary w-full h-10 text-sm flex items-center justify-center gap-2" disabled={loading}>
               {loading ? (
@@ -112,6 +113,36 @@ export default function Login() {
           <Link href="/register" className="text-tamil-500 hover:text-tamil-400 font-medium transition-colors">Create one</Link>
         </p>
       </div>
+
+      {showForgot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowForgot(false)}>
+          <div className="card-glass p-6 max-w-sm w-full animate-fade-in-up" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-white">Reset Password</h2>
+              <button onClick={() => setShowForgot(false)} className="text-gray-500 hover:text-gray-300 transition-colors">
+                <FiX size={18} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-400 mb-4">Contact the admin to reset your password:</p>
+            <div className="space-y-3">
+              <a href="mailto:simonpetercys@gmail.com" className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] transition-all group">
+                <FiMail size={16} className="text-tamil-400" />
+                <div>
+                  <p className="text-xs text-gray-500">Email</p>
+                  <p className="text-sm text-white group-hover:text-tamil-400 transition-colors">simonpetercys@gmail.com</p>
+                </div>
+              </a>
+              <a href="tel:+917339614244" className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] transition-all group">
+                <FiPhone size={16} className="text-tamil-400" />
+                <div>
+                  <p className="text-xs text-gray-500">Phone</p>
+                  <p className="text-sm text-white group-hover:text-tamil-400 transition-colors">7339614244</p>
+                </div>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

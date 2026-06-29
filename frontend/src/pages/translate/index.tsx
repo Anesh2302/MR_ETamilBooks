@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { translateText, translateDocument } from '../../services/translation';
-import { FiGlobe, FiRepeat, FiUpload, FiCopy, FiCheck, FiArrowDown } from 'react-icons/fi';
+import { translateText, translateDocument, downloadTranslatedDocument } from '../../services/translation';
+import { FiGlobe, FiRepeat, FiUpload, FiCopy, FiCheck, FiArrowDown, FiDownload } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 const languages: Record<string, string> = {
@@ -33,6 +33,7 @@ export default function TranslatePage() {
   const [sourceLang, setSourceLang] = useState('ta');
   const [targetLang, setTargetLang] = useState('en');
   const [translatedText, setTranslatedText] = useState('');
+  const [originalText, setOriginalText] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState('');
   const [docFile, setDocFile] = useState<File | null>(null);
@@ -50,7 +51,11 @@ export default function TranslatePage() {
     try {
       const res = await translateText({ text: sourceText, source_language: sourceLang, target_language: targetLang });
       setTranslatedText(res.data.translated_text);
-    } catch { toast.error('Translation failed'); }
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || err.message || 'Translation failed';
+      toast.error(msg);
+      if (err.response?.status === 401) setTranslatedText('Session expired. Please login again.');
+    }
     finally { setLoading(false); }
   };
 
@@ -63,10 +68,49 @@ export default function TranslatePage() {
     formData.append('target_language', targetLang);
     try {
       const res = await translateDocument(formData);
+      setOriginalText(res.data.original_text);
       setTranslatedText(res.data.translated_text);
       toast.success('Document translated!');
-    } catch { toast.error('Document translation failed'); }
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || err.message || 'Document translation failed';
+      toast.error(msg);
+    }
     finally { setLoading(false); }
+  };
+
+  const downloadText = (text: string, label: string) => {
+    const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Translation</title></head><body><pre style='font-size:12pt;font-family:Calibri;white-space:pre-wrap;word-wrap:break-word;'>${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre></body></html>`;
+    const blob = new Blob([html], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${label}.doc`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadDocx = async () => {
+    if (!docFile) return;
+    setLoading(true);
+    const formData = new FormData();
+    formData.append('file', docFile);
+    formData.append('source_language', sourceLang);
+    formData.append('target_language', targetLang);
+    try {
+      const res = await downloadTranslatedDocument(formData);
+      const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = docFile.name.replace(/\.[^.]+$/, '') + '_translated.docx';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Translated document downloaded!');
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Download failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const copyText = (label: string, text: string) => {
@@ -125,7 +169,19 @@ export default function TranslatePage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>Translation ({languages[targetLang]})</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Translation ({languages[targetLang]})</label>
+                {translatedText && !loading && (
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => copyText('translation', translatedText)} className="text-xs flex items-center gap-1 hover:text-tamil-400 transition-colors" style={{ color: 'var(--text-secondary)' }}>
+                      {copied === 'translation' ? <><FiCheck size={12} /> Copied</> : <><FiCopy size={12} /> Copy</>}
+                    </button>
+                    <button onClick={() => downloadText(translatedText, 'translated')} className="text-xs flex items-center gap-1 hover:text-tamil-400 transition-colors" style={{ color: 'var(--text-secondary)' }}>
+                      <FiDownload size={12} /> Download
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="input-field h-40 overflow-y-auto whitespace-pre-wrap" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
                 {loading ? (
                   <div className="flex items-center justify-center h-full">
@@ -133,11 +189,6 @@ export default function TranslatePage() {
                   </div>
                 ) : translatedText}
               </div>
-              {translatedText && !loading && (
-                <button onClick={() => copyText('translation', translatedText)} className="mt-1 text-xs flex items-center gap-1 hover:text-tamil-400 transition-colors" style={{ color: 'var(--text-secondary)' }}>
-                  {copied === 'translation' ? <><FiCheck size={12} /> Copied</> : <><FiCopy size={12} /> Copy</>}
-                </button>
-              )}
             </div>
           </div>
         ) : (
@@ -152,14 +203,33 @@ export default function TranslatePage() {
               {docFile && <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>{docFile.name} ({(docFile.size / 1024).toFixed(1)} KB)</p>}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>Translation</label>
-              <div className="input-field h-32 overflow-y-auto whitespace-pre-wrap" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-                {loading ? (
-                  <div className="flex items-center justify-center h-full">
-                    <span className="w-5 h-5 rounded-full border-2 border-tamil-400/30 border-t-tamil-400 animate-spin" />
-                  </div>
-                ) : translatedText}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--text-primary)' }}>Original Document</label>
+                <div className="input-field h-40 overflow-y-auto whitespace-pre-wrap text-sm" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+                  {loading ? (
+                    <div className="flex items-center justify-center h-full">
+                      <span className="w-5 h-5 rounded-full border-2 border-tamil-400/30 border-t-tamil-400 animate-spin" />
+                    </div>
+                  ) : originalText || <span className="italic opacity-50">Upload a document to see original text</span>}
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Translation ({languages[targetLang]})</label>
+                  {translatedText && !loading && (
+                    <button onClick={downloadDocx} className="text-xs flex items-center gap-1 hover:text-tamil-400 transition-colors" style={{ color: 'var(--text-secondary)' }}>
+                      <FiDownload size={12} /> Download .docx
+                    </button>
+                  )}
+                </div>
+                <div className="input-field h-40 overflow-y-auto whitespace-pre-wrap text-sm" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+                  {loading ? (
+                    <div className="flex items-center justify-center h-full">
+                      <span className="w-5 h-5 rounded-full border-2 border-tamil-400/30 border-t-tamil-400 animate-spin" />
+                    </div>
+                  ) : translatedText || <span className="italic opacity-50">Translation will appear here</span>}
+                </div>
               </div>
             </div>
           </div>

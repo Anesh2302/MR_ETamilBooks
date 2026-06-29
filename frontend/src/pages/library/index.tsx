@@ -53,9 +53,6 @@ export default function Library() {
   const [selectedBook, setSelectedBook] = useState<any>(null);
   const [bookLoading, setBookLoading] = useState(false);
   const [bookError, setBookError] = useState('');
-  const [previewError, setPreviewError] = useState(false);
-  const [iframeReady, setIframeReady] = useState(false);
-
   const fetchBooks = useCallback(async (p: number) => {
     setLoading(true);
     const params: any = { page: p, per_page: PER_PAGE };
@@ -82,8 +79,6 @@ export default function Library() {
       if (id) {
         setBookLoading(true);
         setBookError('');
-        setPreviewError(false);
-        setIframeReady(false);
         getBook(id)
           .then(res => setSelectedBook(res.data))
           .catch(() => setBookError('Book not found'))
@@ -308,20 +303,7 @@ export default function Library() {
                 </a>
               </div>
               <div className="w-full h-[80vh] rounded-xl overflow-hidden relative" style={{ border: '1px solid var(--border-color)' }}>
-                {!iframeReady && !previewError && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3" style={{ background: 'var(--bg-primary)' }}>
-                    <div className="relative"><div className="w-10 h-10 rounded-full border-2 border-white/10" /><div className="absolute inset-0 w-10 h-10 rounded-full border-t-2 border-tamil-500 animate-spin" /></div>
-                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading book preview...</span>
-                  </div>
-                )}
-                {previewError ? (
-                  <div className="flex flex-col items-center justify-center h-full gap-4" style={{ background: 'var(--bg-primary)' }}>
-                    <div className="text-5xl">📖</div>
-                    <p className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>Preview unavailable</p>
-                    <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>This book cannot be previewed inline.</p>
-                    <a href={absDownloadUrl} className="btn-primary inline-flex items-center gap-2"><FiDownload size={14} /> Download to view</a>
-                  </div>
-                ) : selectedBook.content_text ? (
+                {selectedBook.content_text ? (
                   <div className="p-8 overflow-y-auto h-full" style={{ background: 'var(--bg-primary)' }}>
                     <div className="max-w-3xl mx-auto whitespace-pre-wrap leading-relaxed text-lg" style={{ color: 'var(--text-primary)' }}>
                       {selectedBook.content_text}
@@ -330,10 +312,8 @@ export default function Library() {
                 ) : (
                   <iframe
                     src={absFileUrl}
-                    className={`w-full h-full transition-opacity duration-500 ${iframeReady ? 'opacity-100' : 'opacity-0'}`}
+                    className="w-full h-full"
                     title={selectedBook.title}
-                    onLoad={() => setIframeReady(true)}
-                    onError={() => setPreviewError(true)}
                   />
                 )}
               </div>
