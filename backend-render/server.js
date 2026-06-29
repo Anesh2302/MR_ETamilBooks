@@ -550,6 +550,30 @@ app.get('/api/translate/history', auth, async (req, res) => {
   res.json(await query('SELECT * FROM translate_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 50', [req.user.id]));
 });
 
+async function translateChunks(text, sl, tl) {
+  const chunks = [];
+  for (let i = 0; i < text.length; i += 2000) {
+    chunks.push(text.slice(i, i + 2000));
+  }
+  const results = [];
+  for (const chunk of chunks) {
+    let translated = null;
+    try {
+      const q = encodeURIComponent(chunk);
+      const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=' + sl + '&tl=' + tl + '&dt=t&q=' + q;
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 15000);
+      const r = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+      clearTimeout(tid);
+      const j = await r.json();
+      const gt = j && j[0] && j[0].map ? j[0].map((s) => s[0]).filter(Boolean).join('') : null;
+      if (gt) translated = gt;
+    } catch {}
+    results.push(translated || chunk);
+  }
+  return results.join('\n\n');
+}
+
 app.post('/api/translate/document', auth, upload.single('file'), handleMulterError, async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ detail: 'No file uploaded' });
@@ -575,36 +599,11 @@ app.post('/api/translate/document', auth, upload.single('file'), handleMulterErr
     if (!extracted) return res.status(400).json({ detail: 'Could not extract text from file' });
     const source_language = req.body.source_language || '';
     const target_language = req.body.target_language || 'en';
-    const tl = target_language;
-    let translated = null;
-    let method = 'none';
-    const local = localTranslate(extracted.slice(0, 500), tl, source_language);
-    if (local && extracted.length < 500) { translated = local; method = 'local'; }
-    if (!translated) {
-      try {
-        const q = encodeURIComponent(extracted.slice(0, 500));
-        const sl = source_language || (/[\u0B80-\u0BFF]/.test(extracted) ? 'ta' : 'en');
-        const pair = sl + '|' + tl;
-        const url = 'https://api.mymemory.translated.net/get?q=' + q + '&langpair=' + pair + '&de=simonpetercys@gmail.com';
-        const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), 6000);
-        const r = await fetch(url, { signal: controller.signal });
-        clearTimeout(tid);
-        const j = await r.json();
-        const myTxt = j.responseData && j.responseData.translatedText;
-        if (myTxt && myTxt !== extracted && !myTxt.includes('INVALID') && !myTxt.includes('PLEASE SELECT')) {
-          translated = myTxt;
-          method = 'mymemory';
-        }
-      } catch { method = 'mymemory_err'; }
-    }
-    if (!translated) {
-      translated = '[' + tl.toUpperCase() + '] ' + extracted;
-      if (!method.startsWith('error:')) method = 'fallback';
-    }
+    const sl = source_language || (/[\u0B80-\u0BFF]/.test(extracted) ? 'ta' : 'en');
+    const translated = await translateChunks(extracted, sl, target_language);
     await insert('INSERT INTO translate_history (user_id, source_text, translated_text, source_language, target_language) VALUES (?, ?, ?, ?, ?)',
-      [req.user.id, extracted.slice(0, 500), translated.slice(0, 500), source_language || '', tl]);
-    res.json({ translated_text: translated, source_language, target_language: tl, method, extracted_length: extracted.length });
+      [req.user.id, extracted.slice(0, 500), translated.slice(0, 500), source_language || '', target_language]);
+    res.json({ original_text: extracted, translated_text: translated, source_language, target_language, method: 'google' });
   } catch (e) {
     res.status(500).json({ detail: 'Document translation failed: ' + e.message });
   }
