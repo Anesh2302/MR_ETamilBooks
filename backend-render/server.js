@@ -1340,7 +1340,7 @@ app.post('/api/admin/add-external-link', auth, adminOnly, async (req, res) => {
       "INSERT INTO books (title, author, language, description, file_type, file_url, category_id, uploaded_by, status) VALUES (?,?,?,?,?,?,?,?,?)",
       [title, author || '', language || 'en', description || '', 'link', file_url, catId, req.user.id, 'approved']
     );
-    res.json({ added: true, id });
+    res.json({ added: true, id: Number(id) });
   } catch (e) {
     res.status(500).json({ detail: e.message });
   }

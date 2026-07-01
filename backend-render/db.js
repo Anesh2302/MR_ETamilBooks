@@ -48,7 +48,7 @@ const insert = async (sql, params = []) => {
     const c = await getClient();
     ensureInit();
     const rs = await c.execute({ sql, args: params });
-    return rs.lastInsertRowid || 0;
+    return Number(rs.lastInsertRowid) || 0;
   } catch (e) {
     return 0;
   }
