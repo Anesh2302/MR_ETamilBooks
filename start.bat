@@ -28,9 +28,9 @@ echo   Frontend: http://localhost:3000
 echo   Adminer:  http://localhost:8080 (if PHP installed)
 echo ============================================
 echo.
-echo Database: MySQL (root/REMOVED on localhost:3306)
+echo Database: MySQL (root on localhost:3306) — see backend/.env
 echo Backend:  D:\ETamil\backend (Express + MySQL)
 echo Frontend: D:\tamil-ebook-translator\web (Next.js)
-echo Login:    admin / admin123
+echo Login:    admin — see backend/.env
 echo ============================================
 echo.
