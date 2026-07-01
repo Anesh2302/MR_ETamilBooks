@@ -1324,6 +1324,28 @@ app.use((err, req, res, next) => {
   });
 });
 
+// --- Add external English link as a book ---
+app.post('/api/admin/add-external-link', auth, adminOnly, async (req, res) => {
+  try {
+    const { title, author, language, description, file_url, category_name_en } = req.body;
+    if (!title || !file_url) return res.status(400).json({ detail: 'title and file_url required' });
+    const dup = await queryOne('SELECT id FROM books WHERE file_url = ?', [file_url]);
+    if (dup) return res.json({ added: false, reason: 'duplicate' });
+    let catId = null;
+    if (category_name_en) {
+      const cat = await queryOne('SELECT id FROM categories WHERE name_en = ?', [category_name_en]);
+      if (cat) catId = Number(cat.id);
+    }
+    const id = await insert(
+      "INSERT INTO books (title, author, language, description, file_type, file_url, category_id, uploaded_by, status) VALUES (?,?,?,?,?,?,?,?,?)",
+      [title, author || '', language || 'en', description || '', 'link', file_url, catId, req.user.id, 'approved']
+    );
+    res.json({ added: true, id });
+  } catch (e) {
+    res.status(500).json({ detail: e.message });
+  }
+});
+
 // --- 404 handler ---
 app.use((req, res) => {
   if (req.path.startsWith('/api')) return res.status(404).json({ detail: 'Not found' });
