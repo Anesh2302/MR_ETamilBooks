@@ -11,7 +11,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: JWT_SECRET
-        value: REMOVED
+        sync: false
       - key: CORS_ORIGINS
         value: https://anesh2302.github.io
       - key: DB_PATH

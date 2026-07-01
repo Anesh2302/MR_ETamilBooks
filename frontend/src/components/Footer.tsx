@@ -11,10 +11,10 @@ const footerLinks = [
     { label: 'Flashcards', href: '/flashcards' },
   ]},
   { title: 'Support', links: [
-    { label: 'About', href: '/' },
-    { label: 'Contact', href: '/' },
-    { label: 'Privacy', href: '/' },
-    { label: 'Terms', href: '/' },
+    { label: 'About', href: '/about' },
+    { label: 'Contact', href: 'mailto:simonpetercys@gmail.com' },
+    { label: 'Privacy', href: '/privacy' },
+    { label: 'Terms', href: '/terms' },
   ]},
 ];
 

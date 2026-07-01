@@ -3,8 +3,12 @@ node_modules/
 out/
 .env
 .env.local
+.env.production
+.env.prod
 *.db
 *.zip
 backend-render/uploads/
 backend-render/.env
 backend-render/etamil.db
+backend/.env
+backend/.env.local

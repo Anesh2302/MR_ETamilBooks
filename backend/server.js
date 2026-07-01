@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -10,7 +11,7 @@ const { initDB, query, queryOne, run, insert } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const JWT_SECRET = 'REMOVED';
+const JWT_SECRET = process.env.JWT_SECRET || (() => { throw new Error('JWT_SECRET environment variable is required'); })();
 
 app.use(cors({ origin: ['http://localhost:3000', 'http://localhost:3001'], credentials: true }));
 app.use(express.json());

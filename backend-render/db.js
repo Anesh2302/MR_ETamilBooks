@@ -108,7 +108,8 @@ const initDB = async () => {
     const existing = await c.execute({ sql: "SELECT id FROM users WHERE username = ?", args: ['simon'] });
     if (!existing.rows || existing.rows.length === 0) {
       const bcrypt = require('bcryptjs');
-      const adminPw = bcrypt.hashSync('REMOVED', 10);
+      const seedPw = process.env.ADMIN_SEED_PASSWORD || 'ChangeMe123!';
+      const adminPw = bcrypt.hashSync(seedPw, 10);
       await c.execute({ sql: "INSERT INTO users (username, email, password, full_name, preferred_language, is_superuser, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)", args: ['simon', 'simonpetercys@gmail.com', adminPw, 'Simon', 'ta', 1, 1] });
     }
     await c.execute({ sql: "INSERT OR IGNORE INTO roles (name, permissions) VALUES (?, ?)", args: ['admin', '["all"]'] });
