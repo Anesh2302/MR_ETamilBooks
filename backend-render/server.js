@@ -158,6 +158,11 @@ async function adminOnly(req, res, next) {
   next();
 }
 
+function requireAdmin(req, res, next) {
+  if (!req.user?.is_superuser) return res.status(403).json({ detail: 'Admin access required' });
+  next();
+}
+
 // --- Auth routes ---
 app.post('/api/auth/login', authLimiter, [
   body('username').trim().notEmpty().withMessage('Username is required'),
@@ -309,8 +314,9 @@ app.post('/api/books', auth, upload.fields([{ name: 'file', maxCount: 1 }, { nam
   const { title, title_ta, author, author_ta, language, description, description_ta, category_id, file_type } = req.body;
   const fileUrl = req.files?.file?.[0] ? `/uploads/${req.files.file[0].filename}` : '';
   const coverUrl = req.files?.cover?.[0] ? `/uploads/${req.files.cover[0].filename}` : '';
-  await insert('INSERT INTO books (title, title_ta, author, author_ta, language, description, description_ta, file_type, file_url, cover_url, category_id, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [sanitizeStr(title), sanitizeStr(title_ta), sanitizeStr(author), sanitizeStr(author_ta), language || 'ta', sanitizeStr(description), sanitizeStr(description_ta), file_type || 'pdf', fileUrl, coverUrl, category_id || null, req.user.id]);
+  const status = req.user.is_superuser ? 'approved' : 'pending';
+  await insert('INSERT INTO books (title, title_ta, author, author_ta, language, description, description_ta, file_type, file_url, cover_url, category_id, uploaded_by, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [sanitizeStr(title), sanitizeStr(title_ta), sanitizeStr(author), sanitizeStr(author_ta), language || 'ta', sanitizeStr(description), sanitizeStr(description_ta), file_type || 'pdf', fileUrl, coverUrl, category_id || null, req.user.id, status]);
   res.json({ id: 0, success: true, message: 'Book uploaded' });
 });
 
@@ -343,9 +349,10 @@ app.post('/api/books/upload', auth, uploadLimiter, upload.fields([{ name: 'file'
   const { title, title_ta, author, author_ta, language, description, description_ta, category_id } = req.body;
   const fileUrl = req.files?.file?.[0] ? `/uploads/${req.files.file[0].filename}` : '';
   const coverUrl = req.files?.cover?.[0] ? `/uploads/${req.files.cover[0].filename}` : '';
+  const uploadStatus = req.user.is_superuser ? 'approved' : 'pending';
   await insert('INSERT INTO books (title, title_ta, author, author_ta, language, description, description_ta, file_url, cover_url, category_id, uploaded_by, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [sanitizeStr(title) || 'Untitled', sanitizeStr(title_ta), sanitizeStr(author), sanitizeStr(author_ta), language || 'ta', sanitizeStr(description), sanitizeStr(description_ta), fileUrl, coverUrl, category_id || null, req.user.id, 'pending_approval']);
-  res.json({ id: 0, status: 'pending_approval', message: 'Book uploaded for review' });
+    [sanitizeStr(title) || 'Untitled', sanitizeStr(title_ta), sanitizeStr(author), sanitizeStr(author_ta), language || 'ta', sanitizeStr(description), sanitizeStr(description_ta), fileUrl, coverUrl, category_id || null, req.user.id, uploadStatus]);
+  res.json({ id: 0, status: uploadStatus, message: uploadStatus === 'approved' ? 'Book uploaded' : 'Book uploaded for review' });
 });
 
 app.get('/api/books/:id/download', [
@@ -953,6 +960,8 @@ app.post('/api/admin/users/:id/toggle-admin', auth, adminOnly, [
   param('id').isInt(),
 ], validate, async (req, res) => {
   await run('UPDATE users SET is_superuser = CASE WHEN is_superuser THEN 0 ELSE 1 END WHERE id = ?', [Number(req.params.id)]);
+  await insert('INSERT INTO admin_audit_log (admin_id, action, target_type, target_id) VALUES (?, ?, ?, ?)',
+    [req.user.id, 'toggle_admin', 'user', Number(req.params.id)]);
   res.json({ success: true });
 });
 
@@ -960,6 +969,8 @@ app.post('/api/admin/users/:id/toggle-active', auth, adminOnly, [
   param('id').isInt(),
 ], validate, async (req, res) => {
   await run('UPDATE users SET is_active = CASE WHEN is_active THEN 0 ELSE 1 END WHERE id = ?', [Number(req.params.id)]);
+  await insert('INSERT INTO admin_audit_log (admin_id, action, target_type, target_id) VALUES (?, ?, ?, ?)',
+    [req.user.id, 'toggle_active', 'user', Number(req.params.id)]);
   res.json({ success: true });
 });
 
@@ -967,6 +978,8 @@ app.delete('/api/admin/users/:id', auth, adminOnly, [
   param('id').isInt(),
 ], validate, async (req, res) => {
   await run('DELETE FROM users WHERE id = ? AND is_superuser = 0', [Number(req.params.id)]);
+  await insert('INSERT INTO admin_audit_log (admin_id, action, target_type, target_id) VALUES (?, ?, ?, ?)',
+    [req.user.id, 'delete_user', 'user', Number(req.params.id)]);
   res.json({ success: true });
 });
 
@@ -1304,6 +1317,37 @@ app.delete('/api/admin/users/:id/roles/:roleId', auth, adminOnly, [
 ], validate, async (req, res) => {
   await run('DELETE FROM user_roles WHERE user_id = ? AND role_id = ?', [Number(req.params.id), Number(req.params.roleId)]);
   res.json({ success: true });
+});
+
+// --- Moderation routes ---
+app.get('/api/admin/books/pending', auth, requireAdmin, async (req, res) => {
+  const rows = await query('SELECT * FROM books WHERE status = ? ORDER BY created_at DESC', ['pending']);
+  res.json(rows);
+});
+
+app.put('/api/admin/books/:id/approve', auth, requireAdmin, [
+  param('id').isInt(),
+], validate, async (req, res) => {
+  await run('UPDATE books SET status = ? WHERE id = ?', ['approved', Number(req.params.id)]);
+  await insert('INSERT INTO admin_audit_log (admin_id, action, target_type, target_id) VALUES (?, ?, ?, ?)',
+    [req.user.id, 'approve_book', 'book', Number(req.params.id)]);
+  res.json({ success: true });
+});
+
+app.put('/api/admin/books/:id/reject', auth, requireAdmin, [
+  param('id').isInt(),
+], validate, async (req, res) => {
+  await run('UPDATE books SET status = ? WHERE id = ?', ['rejected', Number(req.params.id)]);
+  await insert('INSERT INTO admin_audit_log (admin_id, action, target_type, target_id) VALUES (?, ?, ?, ?)',
+    [req.user.id, 'reject_book', 'book', Number(req.params.id)]);
+  res.json({ success: true });
+});
+
+app.get('/api/admin/audit-log', auth, requireAdmin, async (req, res) => {
+  const logs = await query(
+    'SELECT aal.*, u.username as admin_name FROM admin_audit_log aal LEFT JOIN users u ON u.id = aal.admin_id ORDER BY aal.created_at DESC LIMIT 200'
+  );
+  res.json(logs);
 });
 
 // --- Error handler ---

@@ -12,3 +12,4 @@ backend-render/.env
 backend-render/etamil.db
 backend/.env
 backend/.env.local
+backend-render/backup-*.sql

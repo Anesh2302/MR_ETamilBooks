@@ -6,12 +6,29 @@ import { getBook, updateProgress, createBookmark, deleteBookmark, getBookmarks }
 import { translateText } from '../../services/translation';
 import { API_URL } from '../../services/api';
 import Head from 'next/head';
+import { toast } from 'react-toastify';
+import { getFlashcardSets, createFlashcardSet, addFlashcard } from '../../services/flashcards';
 import { FiBookmark, FiDownload, FiArrowLeft, FiExternalLink, FiChevronLeft, FiChevronRight, FiChevronsLeft, FiChevronsRight, FiRefreshCw, FiBookOpen, FiFileText } from 'react-icons/fi';
 
 type ViewMode = 'tamil' | 'english' | 'side-by-side';
 
 function splitContent(text: string): string[] {
   return text.split(/\n+/).filter(Boolean);
+}
+
+function TappableText({ text, onWordTap }: { text: string; onWordTap: (word: string) => void }) {
+  return (
+    <>
+      {text.split(/(\s+)/).map((part, i) => {
+        if (part.trim().length === 0) return <span key={i}>{part}</span>;
+        return (
+          <span key={i} onClick={() => onWordTap(part)} className="cursor-pointer hover:bg-tamil-500/20 rounded px-0.5 transition-colors">
+            {part}
+          </span>
+        );
+      })}
+    </>
+  );
 }
 
 export default function BookDetail() {
@@ -27,7 +44,33 @@ export default function BookDetail() {
   const [viewMode, setViewMode] = useState<ViewMode>('side-by-side');
   const [translations, setTranslations] = useState<Record<number, string>>({});
   const [translating, setTranslating] = useState(false);
+  const [defaultSetId, setDefaultSetId] = useState<number | null>(null);
   const readerRef = useRef<HTMLDivElement>(null);
+
+  const ensureDefaultSet = async () => {
+    if (defaultSetId) return defaultSetId;
+    try {
+      const { data } = await getFlashcardSets();
+      const existing = data.find((s: any) => s.name === 'Words from Reading');
+      if (existing) { setDefaultSetId(existing.id); return existing.id; }
+      const { data: created } = await createFlashcardSet({ name: 'Words from Reading', source_language: 'ta', target_language: 'en' });
+      setDefaultSetId(created.id);
+      return created.id;
+    } catch { return null; }
+  };
+
+  const handleWordTap = async (word: string) => {
+    if (!isAuthenticated) { toast.info('Sign in to save words to flashcards'); return; }
+    const cleaned = word.replace(/[^\w\s]/g, '').trim();
+    if (!cleaned || cleaned.length < 2) return;
+    try {
+      const setId = await ensureDefaultSet();
+      if (!setId) { toast.error('Could not create flashcard set'); return; }
+      const { data } = await translateText({ text: cleaned, source_language: 'ta', target_language: 'en' });
+      await addFlashcard(setId, { source_text: cleaned, translated_text: data.translated_text || cleaned });
+      toast.success(`Added "${cleaned}" to flashcards`);
+    } catch { toast.error('Could not add word to flashcards'); }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -295,7 +338,11 @@ export default function BookDetail() {
                       தமிழ் (Original)
                     </div>
                     <div className="whitespace-pre-wrap leading-relaxed text-[15px]" style={{ color: 'var(--text-primary)' }}>
-                      {pageContent.join('\n\n') || <span className="italic opacity-50">No content on this page</span>}
+                      {pageContent.length > 0 ? pageContent.map((para, i) => (
+                        <p key={i} className="mb-4 last:mb-0">
+                          <TappableText text={para} onWordTap={handleWordTap} />
+                        </p>
+                      )) : <span className="italic opacity-50">No content on this page</span>}
                     </div>
                   </div>
                   <div className="p-6 overflow-y-auto" style={{ background: 'var(--bg-primary)' }}>
@@ -311,8 +358,12 @@ export default function BookDetail() {
                 </div>
               ) : viewMode === 'tamil' ? (
                 <div className="p-8 overflow-y-auto h-full" style={{ background: 'var(--bg-primary)' }}>
-                  <div className="max-w-3xl mx-auto whitespace-pre-wrap leading-relaxed text-lg" style={{ color: 'var(--text-primary)' }}>
-                    {pageContent.join('\n\n') || <span className="italic opacity-50">No content on this page</span>}
+                  <div className="max-w-3xl mx-auto leading-relaxed text-lg" style={{ color: 'var(--text-primary)' }}>
+                    {pageContent.length > 0 ? pageContent.map((para, i) => (
+                      <p key={i} className="mb-6 last:mb-0">
+                        <TappableText text={para} onWordTap={handleWordTap} />
+                      </p>
+                    )) : <span className="italic opacity-50">No content on this page</span>}
                   </div>
                 </div>
               ) : (

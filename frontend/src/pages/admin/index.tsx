@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../services/api';
 import { toast } from 'react-toastify';
-import { FiBook, FiUsers, FiUpload, FiBarChart2, FiShield, FiGlobe, FiLoader } from 'react-icons/fi';
+import { FiBook, FiUsers, FiUpload, FiBarChart2, FiShield, FiGlobe, FiLoader, FiClock } from 'react-icons/fi';
 
 export default function AdminDashboard() {
   const { isAuthenticated, isAdmin, authLoading } = useAuth();
@@ -43,6 +43,7 @@ export default function AdminDashboard() {
     { icon: FiBarChart2, label: 'Dashboard', desc: 'Overview & statistics', href: '/admin', color: 'from-indigo-500 to-indigo-600' },
     { icon: FiUpload, label: 'Upload Book', desc: 'Add new books to library', href: '/admin/upload', color: 'from-tamil-500 to-orange-500' },
     { icon: FiGlobe, label: 'Scrape Books', desc: 'Import books from external sources', action: handleScrape, loading: scraping, color: 'from-green-500 to-emerald-600' },
+    { icon: FiClock, label: 'Pending Review', desc: 'Approve or reject uploaded books', href: '/admin/pending', color: 'from-yellow-500 to-orange-500' },
     { icon: FiUsers, label: 'Manage Users', desc: 'View and manage users', href: '/admin/users', color: 'from-blue-500 to-cyan-500' },
   ];
 
